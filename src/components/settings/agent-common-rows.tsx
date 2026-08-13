@@ -139,6 +139,33 @@ export function AgentCommonRows({
 					</SelectContent>
 				</Select>
 			</SettingsRow>
+			<SettingsRow
+				label={t("agent.gtero.enabled.label")}
+				htmlFor={`agent-gtero-enabled${idSuffix}`}
+				description={t("agent.gtero.enabled.description")}
+			>
+				<Switch
+					id={`agent-gtero-enabled${idSuffix}`}
+					checked={settings.gtero.enabled}
+					onCheckedChange={(v) =>
+						patch({ gtero: { ...settings.gtero, enabled: v } })
+					}
+				/>
+			</SettingsRow>
+			<SettingsRow
+				label={t("agent.gtero.sticky.label")}
+				htmlFor={`agent-gtero-sticky${idSuffix}`}
+				description={t("agent.gtero.sticky.description")}
+			>
+				<Switch
+					id={`agent-gtero-sticky${idSuffix}`}
+					checked={settings.gtero.sticky}
+					disabled={!settings.gtero.enabled}
+					onCheckedChange={(v) =>
+						patch({ gtero: { ...settings.gtero, sticky: v } })
+					}
+				/>
+			</SettingsRow>
 		</>
 	);
 }

@@ -34,7 +34,9 @@ pub fn build_prompt(
             format!(
                 "You are running the Agentero paper-reader workflow. {skill_line} \
                  Target is a paper folder under papers/. Prefer TeX under source/, else PAPER.md, \
-                 else local PDF. Write structured lecture notes into that paper's NOTES.md. Keep [[wikilinks]]. \
+                 else local PDF. Write structured lecture notes into that paper's NOTES.md. \
+                 If NOTES.md already has substantial notes, APPEND a section headed `## Gtero · YYYY-MM-DD` \
+                 instead of replacing user-written text. Keep [[wikilinks]]. \
                  End with `## Sources` of Vault-relative paths you read."
             )
         }
@@ -49,6 +51,14 @@ pub fn build_prompt(
             format!(
                 "Draft a Related Work section from local papers in this Vault. Prefer each paper's NOTES.md \
                  under papers/; open PAPER.md/source only when needed. Keep [[wikilinks]] and end with `## Sources`.{skill_hint}"
+            )
+        }
+        "corpus_synthesis" => {
+            format!(
+                "Synthesize papers already read in this Vault. Search the catalog and read NOTES.md / PAPER.md \
+                 of relevant papers first. Do not dump full PDFs into context. Output a theme map, method comparison, \
+                 overlaps, gaps, and what to read next. Cite Vault-relative paths, keep [[wikilinks]], and write the \
+                 report to notes/ as a new Markdown file named with today's date. End with `## Sources`.{skill_hint}"
             )
         }
         _ => {
@@ -165,6 +175,7 @@ pub fn strip_prompt_envelope_for_display(text: &str) -> String {
         "You are helping with a research vault",
         "You are answering questions about a local research vault",
         "Draft a Related Work section from local papers",
+        "Synthesize papers already read in this Vault",
     ] {
         if text.starts_with(prefix) {
             if let Some(rest) = text.rsplit("\n\n").next() {
@@ -520,6 +531,62 @@ mod tests {
         assert!(p.contains("Agentero injects") || p.contains("does not use Agentero Composer `$`"));
         // Should not tell the agent to activate with $paper-reader as a runtime command
         assert!(!p.contains("Activate the skill with `$paper-reader`"));
+    }
+
+    #[test]
+    fn corpus_synthesis_avoids_dumping_pdfs() {
+        let p = build_prompt(
+            Some("corpus_synthesis"),
+            "Synthesize BBObasic",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+            None,
+        );
+        assert!(p.contains("Do not dump full PDFs"));
+        assert!(p.contains("NOTES.md"));
+        assert!(p.contains("notes/"));
+    }
+
+    #[test]
+    fn paper_reader_prompt_appends_instead_of_replacing_notes() {
+        let p = build_prompt(
+            Some("paper_reader"),
+            "Read this paper",
+            Some("papers/1706.03762"),
+            SkillMentionStyle::InjectedOnly,
+            &["paper-reader".into()],
+            None,
+            None,
+        );
+        assert!(p.contains("## Gtero · YYYY-MM-DD"));
+        assert!(p.contains("instead of replacing user-written text"));
+        assert_eq!(strip_prompt_envelope_for_display(&p), "Read this paper");
+    }
+
+    #[test]
+    fn strip_prompt_envelope_strips_corpus_synthesis() {
+        let p = build_prompt(
+            Some("corpus_synthesis"),
+            "Synthesize BBObasic",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(strip_prompt_envelope_for_display(&p), "Synthesize BBObasic");
+    }
+
+    #[test]
+    fn strip_prompt_envelope_strips_corpus_synthesis_without_marker() {
+        let partial = "Synthesize papers already read in this Vault. Search the catalog.\n\n\
+             Synthesize BBObasic";
+        assert_eq!(
+            strip_prompt_envelope_for_display(partial),
+            "Synthesize BBObasic"
+        );
     }
 
     #[test]

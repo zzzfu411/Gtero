@@ -22,10 +22,16 @@ import {
 	listenAgentPlan,
 	listenAgentTool,
 	type RunOnceAccepted,
-	runOnce,
 } from "@/lib/agent";
 import {
+	clearGteroRunAttempt,
+	handleGteroResumeFailure,
+	runOnceGtero,
+} from "@/lib/agent/gtero-run";
+import { rememberGteroSession } from "@/lib/agent/vault-session";
+import {
 	enqueueBackgroundTask,
+	isBackgroundTaskCancelledError,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
 import { isTauri } from "@/lib/core/tauri";
@@ -104,6 +110,7 @@ export function buildPaperReaderUserPrompt(
 		"Prefer TeX under source/, else PAPER.md, else local PDF.",
 		`Write structured lecture notes into \`${paperRel}/NOTES.md\`.`,
 		paperReaderLanguageInstruction(language),
+		"If NOTES.md already has substantial notes, APPEND a section headed `## Gtero · YYYY-MM-DD` instead of replacing user-written text.",
 		"Keep [[wikilinks]]. End with ## Sources listing Vault-relative paths you read.",
 	].join("\n");
 }
@@ -180,7 +187,15 @@ async function waitForAgentSession(
 				unsubs.push(
 					await listenAgentFailed((ev: AgentFailedEvent) => {
 						if (ev.sessionId !== sessionId) return;
-						finishErr(ev.error || i18n.t("app:tasks.paperReadFailed"));
+						void handleGteroResumeFailure({
+							error: ev.error || i18n.t("app:tasks.paperReadFailed"),
+							localSessionId: sessionId,
+							copy: {
+								sessionLost: i18n.t("agent:messages.sessionLost"),
+								sessionRetry: i18n.t("agent:messages.sessionRetry"),
+								fallback: ev.error || i18n.t("app:tasks.paperReadFailed"),
+							},
+						}).then((msg) => finishErr(msg));
 					}),
 				);
 				unsubs.push(
@@ -244,31 +259,53 @@ export async function runPaperReaderWorkflow(opts: {
 				const skillStyle = skillMentionStyleForTemplate(template);
 				const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
 
-				const accepted: RunOnceAccepted = await runOnce({
-					vaultPath: opts.vaultRoot,
-					workflow: "paper_reader",
-					target: paperRel,
-					prompt: userPrompt,
-					skillIds: [PAPER_READER_SKILL_ID],
-					autoApprove: true,
-					// Background workflow — never surface in Agent chat history.
-					hideFromChatHistory: true,
-				});
-				const cancelAgent = () => {
-					void invoke("agent_cancel_run", { sessionId: accepted.sessionId });
-				};
-				if (signal.aborted) {
-					cancelAgent();
-					throw new Error(i18n.t("app:tasks.cancelled"));
+				try {
+					const accepted: RunOnceAccepted = await runOnceGtero({
+						vaultPath: opts.vaultRoot,
+						workflow: "paper_reader",
+						target: paperRel,
+						prompt: userPrompt,
+						skillIds: [PAPER_READER_SKILL_ID],
+						autoApprove: true,
+						// Background workflow — never surface in Agent chat history.
+						hideFromChatHistory: true,
+					});
+					const cancelAgent = () => {
+						void invoke("agent_cancel_run", { sessionId: accepted.sessionId });
+					};
+					if (signal.aborted) {
+						cancelAgent();
+						throw new Error(i18n.t("app:tasks.cancelled"));
+					}
+					signal.addEventListener("abort", cancelAgent, { once: true });
+
+					setDetail(i18n.t("app:tasks.paperReadRunning"));
+					const result = await waitForAgentSession(accepted.sessionId, id);
+					clearGteroRunAttempt(accepted.sessionId);
+					if (result.providerSessionId) {
+						await rememberGteroSession(
+							opts.vaultRoot,
+							result.providerSessionId,
+						);
+					}
+
+					setDetail(i18n.t("app:tasks.paperReadMarking"));
+					await setPaperIsRead(opts.vaultRoot, paperRel, true);
+					setDetail(i18n.t("app:tasks.paperReadDone"));
+				} catch (e) {
+					if (signal.aborted || isBackgroundTaskCancelledError(e)) {
+						throw e;
+					}
+					const msg = await handleGteroResumeFailure({
+						error: e,
+						copy: {
+							sessionLost: i18n.t("agent:messages.sessionLost"),
+							sessionRetry: i18n.t("agent:messages.sessionRetry"),
+							fallback: e instanceof Error ? e.message : String(e),
+						},
+					});
+					throw new Error(msg);
 				}
-				signal.addEventListener("abort", cancelAgent, { once: true });
-
-				setDetail(i18n.t("app:tasks.paperReadRunning"));
-				await waitForAgentSession(accepted.sessionId, id);
-
-				setDetail(i18n.t("app:tasks.paperReadMarking"));
-				await setPaperIsRead(opts.vaultRoot, paperRel, true);
-				setDetail(i18n.t("app:tasks.paperReadDone"));
 			},
 		);
 	} finally {

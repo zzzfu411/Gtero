@@ -70,3 +70,6 @@ export type UseAgentPanelArgs = Pick<
 	| "paperMetaByRelPath"
 	| "paperTreeLabelMode"
 >;
+
+/** Label for the sidebar "+" action: plain new chat vs Gtero fork. */
+export type NewConversationKind = "new" | "fork";

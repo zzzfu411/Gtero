@@ -2,9 +2,11 @@ import {
 	Check,
 	Copy,
 	Languages,
+	Lightbulb,
 	MessageSquare,
 	MessageSquarePlus,
 	NotebookPen,
+	ScrollText,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,17 +38,19 @@ type SelectionMenuProps = {
 	/** Pin the selection as an Agent composer context chip and open the chat. */
 	onAddToChat: () => void;
 	onTranslate: () => void;
+	onExplain: () => void;
+	onWriteNotes: () => void;
 	/** Dismiss the menu without acting */
 	onClose: () => void;
 };
 
-const BAR_W = 340;
+const BAR_W = 468;
 const BAR_H = 40;
 const COPIED_FLASH_MS = 1500;
 
 /**
  * Floating action bar shown next to a text selection: a row of color swatches
- * (highlight), then Copy / Annotate / Ask / Translate.
+ * (highlight), then Copy / Annotate / Ask / Translate / Explain / Write notes.
  * Copy keeps the bar open and swaps the copy icon for a check briefly.
  */
 export function SelectionMenu({
@@ -57,6 +61,8 @@ export function SelectionMenu({
 	onAsk,
 	onAddToChat,
 	onTranslate,
+	onExplain,
+	onWriteNotes,
 	onClose,
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
@@ -241,6 +247,36 @@ export function SelectionMenu({
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="top">{t("selection.translate")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.explain")}
+							onClick={onExplain}
+						>
+							<Lightbulb className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t("selection.explain")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.writeNotes")}
+							onClick={onWriteNotes}
+						>
+							<ScrollText className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">
+						{t("selection.writeNotes")}
+					</TooltipContent>
 				</Tooltip>
 			</TooltipProvider>
 		</div>

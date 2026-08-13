@@ -1,3 +1,4 @@
+export * from "@/lib/pdf/ask/errors";
 export * from "@/lib/pdf/ask/geometry";
 export * from "@/lib/pdf/ask/io";
 export * from "@/lib/pdf/ask/pending";

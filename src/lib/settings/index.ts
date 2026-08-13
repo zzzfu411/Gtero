@@ -1,6 +1,7 @@
 export {
 	clampEditorLineHeight,
 	DEFAULT_EDITOR_LINE_HEIGHT,
+	DEFAULT_GTERO_SETTINGS,
 	DEFAULT_TRANSLATOR_BASE_URL,
 	EDITOR_LINE_HEIGHT_MAX,
 	EDITOR_LINE_HEIGHT_MIN,
@@ -38,6 +39,7 @@ export type {
 	AppSettings,
 	AutoUpdateInternalLinks,
 	CommercialTranslateProviderId,
+	GteroSettings,
 	LibraryColumnKey,
 	LibraryColumnPref,
 	LocalePreference,

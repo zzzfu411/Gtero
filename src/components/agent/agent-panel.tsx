@@ -12,6 +12,7 @@ import { SidebarHistoryTrailing } from "@/components/agent/agent-history";
 import { AgentPermissionDialog } from "@/components/agent/agent-permission-dialog";
 import { AgentSwitcher } from "@/components/agent/agent-switcher";
 import { ChatTranscript } from "@/components/agent/chat-transcript";
+import { GteroForkDialog } from "@/components/agent/gtero-fork-dialog";
 import type { AgentPanelProps } from "@/components/agent/types";
 import { useAgentPanel } from "@/components/agent/use-agent-panel";
 import { PaneHeader } from "@/components/shell/pane-header";
@@ -169,6 +170,11 @@ export const AgentPanel = memo(function AgentPanel({
 		setHistoryOpen,
 		newConversation,
 		openHistorySession,
+		newConversationKind,
+		forkConfirmOpen,
+		setForkConfirmOpen,
+		confirmForkConversation,
+		vaultThreadId,
 		options,
 		selectedAgentId,
 		hasRunningSessions,
@@ -273,6 +279,7 @@ export const AgentPanel = memo(function AgentPanel({
 							activeTabId={activeTabId}
 							submitting={submitting}
 							headerActions={headerActions}
+							newConversationKind={newConversationKind}
 							onNewConversation={newConversation}
 							onOpenSession={openHistorySession}
 						/>
@@ -295,6 +302,7 @@ export const AgentPanel = memo(function AgentPanel({
 						agentName={selected?.name ?? t("defaultName")}
 						compact={composerCompact}
 						activeTabIsRunning={activeTabIsRunning}
+						continueVaultThread={Boolean(vaultThreadId)}
 						submitting={submitting}
 						switching={switching}
 						editingLineId={editingLineId}
@@ -439,6 +447,11 @@ export const AgentPanel = memo(function AgentPanel({
 			<AgentPermissionDialog
 				permissionRequest={permissionRequest}
 				onDismiss={() => setPermissionRequest(null)}
+			/>
+			<GteroForkDialog
+				open={forkConfirmOpen}
+				onOpenChange={setForkConfirmOpen}
+				onConfirm={confirmForkConversation}
 			/>
 		</section>
 	);

@@ -4,7 +4,7 @@
  * from its gutter pin or from the annotations panel.
  *
  * Its own hook because a turn is a small state machine that nothing else shares:
- * optimistic user message → `runOnce` → three ACP listeners (stream / completed /
+ * optimistic user message → `runOnceGtero` → three ACP listeners (stream / completed /
  * failed) that append into the *thread array* rather than into local state, with
  * one cleanup closure per turn. Persisting on every terminal event is what makes
  * an interrupted app run recoverable, so those write points are part of the
@@ -43,12 +43,22 @@ import {
 	listenAgentFailed,
 	listenAgentStream,
 	type PromptImage,
-	runOnce,
 } from "@/lib/agent";
+import {
+	clearGteroRunAttempt,
+	runOnceGtero,
+	selectStickySessionId,
+} from "@/lib/agent/gtero-run";
+import {
+	isGteroSticky,
+	loadGteroBinder,
+	rememberGteroSession,
+} from "@/lib/agent/vault-session";
 import { notifyError } from "@/lib/core/notify";
 import {
 	createEmptyThread,
 	deletePdfAskThread,
+	gteroUserFacingError,
 	newMessageId,
 	writePdfAskThread,
 } from "@/lib/pdf/ask";
@@ -239,9 +249,22 @@ export function usePdfAskThreads({
 			setStreaming(true);
 
 			const assistantId = newMessageId();
-			const prompt = buildPdfAskPrompt(withUser, question);
+			let includeHistory = true;
+			if (isGteroSticky()) {
+				const path = vaultPath?.trim();
+				if (path) {
+					const binder = await loadGteroBinder(path);
+					includeHistory = !selectStickySessionId({
+						sticky: true,
+						primarySessionId: binder.primarySessionId,
+					});
+				}
+			}
+			const prompt = buildPdfAskPrompt(withUser, question, {
+				includeHistory,
+			});
 			try {
-				const accepted = await runOnce({
+				const accepted = await runOnceGtero({
 					prompt,
 					agentId: agentOpts?.agentId,
 					modelId: agentOpts?.modelId,
@@ -303,6 +326,10 @@ export function usePdfAskThreads({
 				unsubs.push(
 					await listenAgentCompleted((ev) => {
 						if (ev.sessionId !== sessionId) return;
+						if (ev.providerSessionId && vaultPath) {
+							void rememberGteroSession(vaultPath, ev.providerSessionId);
+						}
+						clearGteroRunAttempt(sessionId);
 						setThreads((prev) =>
 							prev.map((th) => {
 								if (th.id !== threadId) return th;
@@ -330,17 +357,28 @@ export function usePdfAskThreads({
 				unsubs.push(
 					await listenAgentFailed((ev) => {
 						if (ev.sessionId !== sessionId) return;
-						setAskError(ev.error || t("pdfAsk.agentFailed"));
-						setThreads((prev) =>
-							prev.map((th) => {
-								if (th.id !== threadId) return th;
-								const msgs = th.messages.filter((m) => m.id !== assistantId);
-								const done = { ...th, messages: msgs };
-								void persist(done);
-								return done;
-							}),
-						);
-						cleanup();
+						void gteroUserFacingError(
+							ev.error,
+							{
+								sessionLost: t("pdfAsk.sessionLost"),
+								sessionRetry: t("pdfAsk.sessionRetry"),
+								fallback: t("pdfAsk.agentFailed"),
+							},
+							{ localSessionId: sessionId },
+						).then((message) => {
+							notifyError(message);
+							setAskError(message);
+							setThreads((prev) =>
+								prev.map((th) => {
+									if (th.id !== threadId) return th;
+									const msgs = th.messages.filter((m) => m.id !== assistantId);
+									const done = { ...th, messages: msgs };
+									void persist(done);
+									return done;
+								}),
+							);
+							cleanup();
+						});
 					}),
 				);
 				if (runDisposedRef.current) {
@@ -350,7 +388,13 @@ export function usePdfAskThreads({
 				}
 			} catch (e) {
 				setStreaming(false);
-				setAskError(e instanceof Error ? e.message : t("pdfAsk.agentFailed"));
+				const message = await gteroUserFacingError(e, {
+					sessionLost: t("pdfAsk.sessionLost"),
+					sessionRetry: t("pdfAsk.sessionRetry"),
+					fallback: t("pdfAsk.agentFailed"),
+				});
+				notifyError(message);
+				setAskError(message);
 			}
 		},
 		[upsertThread, persist, vaultPath, t, setThreads, activeSessionRef],
@@ -384,13 +428,17 @@ export function usePdfAskThreads({
 						modelId: resolved.modelId,
 					});
 				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
+					const message = await gteroUserFacingError(e, {
+						sessionLost: t("pdfAsk.sessionLost"),
+						sessionRetry: t("pdfAsk.sessionRetry"),
+						fallback: t("pdfAsk.agentFailed"),
+					});
 					notifyError(message);
 					setAskError(message);
 				}
 			})();
 		},
-		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef],
+		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef, t],
 	);
 
 	/** Edit last (or any) user turn: drop that message and everything after, then re-send. */
@@ -420,13 +468,17 @@ export function usePdfAskThreads({
 						baseMessages,
 					);
 				} catch (e) {
-					const message = e instanceof Error ? e.message : String(e);
+					const message = await gteroUserFacingError(e, {
+						sessionLost: t("pdfAsk.sessionLost"),
+						sessionRetry: t("pdfAsk.sessionRetry"),
+						fallback: t("pdfAsk.agentFailed"),
+					});
 					notifyError(message);
 					setAskError(message);
 				}
 			})();
 		},
-		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef],
+		[sendToThread, resolvePdfAskAgent, activeCardRef, threadsRef, t],
 	);
 
 	/** Cancel the run, clear the chrome, and close the card if it is an ask card. */

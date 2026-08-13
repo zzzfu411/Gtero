@@ -233,6 +233,16 @@
 		"autoPaperReader": {
 			"label": "Auto paper-reader after import"
 		},
+		"gtero": {
+			"enabled": {
+				"label": "Gtero (Grok vault thread)",
+				"description": "Resume one Grok session per vault for chat, PDF ask/explain, and paper-reader."
+			},
+			"sticky": {
+				"label": "Sticky session",
+				"description": "Reuse `.agentero/grok-workspace.json`. Turn off to start a new ACP session each run."
+			}
+		},
 		"responseLanguage": {
 			"label": "Response language",
 			"auto": "Auto (follow content)",

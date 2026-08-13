@@ -775,6 +775,34 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn paper_reader_user_edits_are_not_upgraded() {
+        let rel = ".agents/skills/paper-reader/SKILL.md";
+        let current =
+            include_str!("../../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
+        let dir = env::temp_dir().join(format!(
+            "agentero-vault-paper-reader-preserve-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = join_rel(&dir, rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "# my custom paper-reader\n").unwrap();
+
+        let mut created = Vec::new();
+        let mut updated = Vec::new();
+        seed_or_upgrade_bundled_file(&dir, rel, current, &mut created, &mut updated).unwrap();
+        assert!(created.is_empty());
+        assert!(updated.is_empty());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "# my custom paper-reader\n"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// Optional smoke write:
     /// `AGENTERO_TEST_VAULT_PATH=$HOME/Downloads/agentero-from-rust cargo test create_vault_at_env_path -- --ignored --nocapture`
     #[test]

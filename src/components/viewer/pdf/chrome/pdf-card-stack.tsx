@@ -32,6 +32,8 @@ type PdfCardStackProps = {
 		onAsk: () => void;
 		onAddToChat: () => void;
 		onTranslate: () => void;
+		onExplain: () => void;
+		onWriteNotes: () => void;
 		onClose: () => void;
 	};
 	visualDraft: {
@@ -134,6 +136,8 @@ export function PdfCardStack({
 					onAsk={selectionMenu.onAsk}
 					onAddToChat={selectionMenu.onAddToChat}
 					onTranslate={selectionMenu.onTranslate}
+					onExplain={selectionMenu.onExplain}
+					onWriteNotes={selectionMenu.onWriteNotes}
 					onClose={selectionMenu.onClose}
 				/>
 			) : null}
@@ -215,6 +219,9 @@ export function PdfCardStack({
 					result={translate.record.result ?? ""}
 					streaming={translate.streaming}
 					error={translate.error ?? translate.record.error ?? null}
+					mode={
+						translate.record.mode === "explain" ? "explain" : "translate"
+					}
 					onOpenSettings={translate.onOpenSettings}
 					onHide={translate.onHide}
 					onDelete={translate.onDelete}

@@ -1,6 +1,7 @@
 import { History, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { NewConversationKind } from "@/components/agent/types";
 import { Button } from "@/components/ui/button";
 import {
 	Popover,
@@ -77,6 +78,7 @@ export function SidebarHistoryTrailing({
 	activeTabId,
 	submitting,
 	headerActions,
+	newConversationKind = "new",
 	onNewConversation,
 	onOpenSession,
 }: {
@@ -86,10 +88,13 @@ export function SidebarHistoryTrailing({
 	activeTabId: string;
 	submitting: boolean;
 	headerActions?: ReactNode;
+	newConversationKind?: NewConversationKind;
 	onNewConversation: () => void;
 	onOpenSession: (item: ChatSessionHistoryItem) => void;
 }) {
 	const { t } = useTranslation("agent");
+	const newLabel =
+		newConversationKind === "fork" ? t("tabs.fork") : t("tabs.new");
 
 	return (
 		<>
@@ -97,8 +102,8 @@ export function SidebarHistoryTrailing({
 				type="button"
 				variant="ghost"
 				size="icon-xs"
-				aria-label={t("tabs.new")}
-				title={t("tabs.new")}
+				aria-label={newLabel}
+				title={newLabel}
 				disabled={submitting}
 				onClick={onNewConversation}
 			>

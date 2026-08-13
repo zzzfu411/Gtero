@@ -2,6 +2,8 @@
 	"labels": {
 		"agent": "Agent",
 		"graph": "引用图谱",
+		"gtero": "Gtero",
+		"backlinks": "反向链接",
 		"notes": "笔记",
 		"untitled": "未命名"
 	},

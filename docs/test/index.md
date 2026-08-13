@@ -94,6 +94,21 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 解析器和 resolver 的边界用例可以放在对应 Rust 模块的 `#[cfg(test)]` 中。依赖 Vault 的 graph/index 测试应创建临时目录和文件，不依赖已提交的缓存文件。
 
+### Windows
+
+Windows 上 `cargo test -p agentero --lib` 默认无法启动：单元测试 exe 从 Common Controls v6 导入 `TaskDialogIndirect`，而 `tauri-build` 只把该 side-by-side 清单嵌入 bin target，进程会在启动时以 `STATUS_ENTRYPOINT_NOT_FOUND`（`0xC0000139`）退出。
+
+不要在 `src-tauri/build.rs` 里加 `cargo:rustc-link-arg=/MANIFESTDEPENDENCY:…`。Cargo 无法把 linker arg 只作用到 lib 测试 harness（`rustc-link-arg-tests` 只覆盖 `tests/` 集成测试，见 rust-lang/cargo#10937），该 flag 还会落到发版的 bin/cdylib（含 Windows 安装包）。CI 只在 macOS 上跑 `cargo test --workspace`（`.github/workflows/ci.yml` 的 `macos-14` job），因此下面是**仅本地 Windows** 的绕过办法：通过环境变量注入清单依赖，不改仓库里的构建配置。
+
+PowerShell：
+
+```powershell
+$env:CARGO_ENCODED_RUSTFLAGS = "-Clink-arg=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+cargo test -p agentero --lib
+```
+
+必须用 `CARGO_ENCODED_RUSTFLAGS` 而不是 `RUSTFLAGS`：Cargo 按空白切分 `RUSTFLAGS`，而这条 flag 本身含空格。改 flag 会使构建缓存失效，第一次运行会重新编译（约数分钟）。
+
 ## 手动验证
 
 纯逻辑优先用自动化测试覆盖。涉及 UI 或桌面流程时，还需要启动应用检查受影响路径。如果 dev 端口被占用或无法做浏览器/桌面验证，汇报时需要明确说明。
@@ -105,7 +120,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | 打开 demo vault | catalog 5 篇、Library 可见、tags 可筛 |
 | 点 `assets/sample.pdf` / `notes/attachments/*.pdf` | 中间栏 PDF 预览（非 papers 路径） |
 | PDF 工具栏：页码 / 适应宽度 / 适应整页 / 大纲 / `⌘F` | 跳页、缩放、书签跳转、命中高亮 |
-| PDF 划词 | 平滑蓝色选区 + 操作菜单（高亮/笔记/提问/翻译） |
+| PDF 划词 | 平滑蓝色选区 + 操作菜单（高亮/笔记/提问/翻译/解释/写入笔记） |
 | 点 `assets/figures/*` 图片 | 中间栏图片预览 |
 | Notes / `.md` 中粘贴图片 | 生成 `{mdDir}/assets/*`，正文 `![](./assets/…)`；文件树可见新文件 |
 | 选中文档中的图片节点 | 显示 Markdown 源码而非位图；取消选中恢复预览 |

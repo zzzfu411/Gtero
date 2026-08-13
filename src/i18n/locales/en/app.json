@@ -2,6 +2,8 @@
 	"labels": {
 		"agent": "Agent",
 		"graph": "Citation graph",
+		"gtero": "Gtero",
+		"backlinks": "Backlinks",
 		"notes": "Notes",
 		"untitled": "Untitled"
 	},

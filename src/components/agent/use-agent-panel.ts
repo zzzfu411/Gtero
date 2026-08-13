@@ -15,7 +15,12 @@ import { useAgentPanelContext } from "@/components/agent/hooks/use-agent-panel-c
 import { useAgentPermissionSurfaces } from "@/components/agent/hooks/use-agent-permission-surfaces";
 import { useAgentSend } from "@/components/agent/hooks/use-agent-send";
 import { useAgentSessionRuntime } from "@/components/agent/hooks/use-agent-session-runtime";
-import type { AgentPanelProps } from "@/components/agent/types";
+import type {
+	AgentPanelProps,
+	NewConversationKind,
+} from "@/components/agent/types";
+import { useSettings } from "@/hooks/use-app-stores";
+import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
 	cancelAgentRun,
@@ -35,6 +40,7 @@ import {
 	nextLineId,
 	resolveSelected,
 } from "@/lib/agent/chat-state";
+import { loadGteroBinder } from "@/lib/agent/vault-session";
 import { removeVisualDraft } from "@/lib/agent/visual-context-store";
 import { isTauri } from "@/lib/core/tauri";
 import { listenAgentSessionHandoff } from "@/lib/shell/workspace-broadcast";
@@ -93,6 +99,7 @@ export function useAgentPanel({
 		sessionHistoryRef,
 		vaultPathRef,
 		previousVaultPathRef,
+		forkPendingRef,
 	} = refs;
 
 	// Shared store selectors (single source of truth for the transcript).
@@ -112,6 +119,17 @@ export function useAgentPanel({
 	const [switching, setSwitching] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
 	const [historyOpen, setHistoryOpen] = useState(false);
+	const [vaultThreadId, setVaultThreadId] = useState<string | null>(null);
+	const [forkConfirmOpen, setForkConfirmOpen] = useState(false);
+	const gteroSticky = useSettings((s) => s.gtero.enabled && s.gtero.sticky);
+	const stickyThreadActive = gteroSticky && Boolean(vaultThreadId);
+	const newConversationKind: NewConversationKind = stickyThreadActive
+		? "fork"
+		: "new";
+
+	useOverlayRegistration("gtero-fork", forkConfirmOpen, () => {
+		setForkConfirmOpen(false);
+	});
 
 	const composerState = useSessionComposerState({
 		vaultPath,
@@ -222,6 +240,7 @@ export function useAgentPanel({
 	} = useAgentSessionRuntime({
 		refs,
 		t,
+		setVaultThreadId,
 		setSessionHistory,
 		applyModelsEvent,
 		applyCollaborationEvent,
@@ -282,6 +301,8 @@ export function useAgentPanel({
 		acpCommandsByAgent,
 		contextPaths,
 		selectedVaultPath,
+		selectedPaperTitle,
+		setVaultThreadId,
 		snapshotComposerState,
 		completeComposerSubmission,
 		setComposerText,
@@ -367,6 +388,39 @@ export function useAgentPanel({
 		cancelCurrentRun,
 	});
 
+	// Restore the vault primary session so the next draft send resumes it.
+	useEffect(() => {
+		if (!gteroSticky || !vaultPath || !isTauri()) {
+			setVaultThreadId(null);
+			if (activeTabRef.current === "draft") {
+				activeConversationRef.current = null;
+			}
+			return;
+		}
+		let cancelled = false;
+		void loadGteroBinder(vaultPath).then((binder) => {
+			if (cancelled) return;
+			if (binder.primarySessionId) {
+				setVaultThreadId(binder.primarySessionId);
+				if (activeTabRef.current === "draft" && !forkPendingRef.current) {
+					activeConversationRef.current = binder.primarySessionId;
+				}
+			} else {
+				setVaultThreadId(null);
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		gteroSticky,
+		vaultPath,
+		selectedAgentId,
+		activeTabRef,
+		activeConversationRef,
+		forkPendingRef,
+	]);
+
 	// Vault switch: cancel running sessions and reset the whole panel context.
 	useEffect(() => {
 		if (previousVaultPathRef.current === vaultPath) return;
@@ -391,6 +445,8 @@ export function useAgentPanel({
 		setActiveTabId("draft");
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
+		setForkConfirmOpen(false);
+		setVaultThreadId(null);
 		clearMessageQueue();
 	}, [
 		vaultPath,
@@ -409,7 +465,7 @@ export function useAgentPanel({
 		submittingRef,
 		activeConversationRef,
 		submissionGenRef,
-		sessionHistoryRef.current,
+		sessionHistoryRef,
 	]);
 
 	// Cross-window handoff: first snapshot only (retries may arrive later).
@@ -502,8 +558,13 @@ export function useAgentPanel({
 		}
 	};
 
-	const newConversation = () => {
+	const beginNewConversation = (fork: boolean) => {
 		if (submittingRef.current) return;
+		forkPendingRef.current = fork;
+		setForkConfirmOpen(false);
+		if (fork) {
+			refs.lastFocusBlockRef.current = "";
+		}
 		historyHydrationGenRef.current += 1;
 		startDraft();
 		resetComposerSession("draft");
@@ -512,7 +573,20 @@ export function useAgentPanel({
 		clearMessageQueue();
 	};
 
-	const { openHistorySession } = useAgentHistory({
+	const newConversation = () => {
+		if (submittingRef.current) return;
+		if (stickyThreadActive) {
+			setForkConfirmOpen(true);
+			return;
+		}
+		beginNewConversation(false);
+	};
+
+	const confirmForkConversation = () => {
+		beginNewConversation(true);
+	};
+
+	const { openHistorySession: openHistorySessionInner } = useAgentHistory({
 		refs,
 		t,
 		i18nLanguage: i18n.language,
@@ -527,6 +601,14 @@ export function useAgentPanel({
 		setHistoryOpen,
 		clearMessageQueue,
 	});
+
+	const openHistorySession = (
+		item: Parameters<typeof openHistorySessionInner>[0],
+	) => {
+		forkPendingRef.current = false;
+		setForkConfirmOpen(false);
+		openHistorySessionInner(item);
+	};
 
 	return {
 		t,
@@ -556,6 +638,11 @@ export function useAgentPanel({
 		setHistoryOpen,
 		newConversation,
 		openHistorySession,
+		newConversationKind,
+		forkConfirmOpen,
+		setForkConfirmOpen,
+		confirmForkConversation,
+		vaultThreadId,
 		// Agent switcher
 		options,
 		selectedAgentId,

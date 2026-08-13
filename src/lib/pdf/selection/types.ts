@@ -22,6 +22,8 @@ export type ActiveSelectionCard = {
 export type SelectionPin = {
 	id: string;
 	kind: SelectionOverlayKind;
+	/** Explain cards reuse the translate overlay with a distinct pin. */
+	variant?: "explain";
 	/** 0–1 page-normalized pin position */
 	x: number;
 	y: number;

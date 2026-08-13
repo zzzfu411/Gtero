@@ -28,7 +28,8 @@
 		"summarizePaper": "Summarize the open paper",
 		"askLibrary": "Ask a question across my library",
 		"listClaims": "List key claims and evidence",
-		"draftRelatedWork": "Draft a Related Work section"
+		"draftRelatedWork": "Draft a Related Work section",
+		"synthesizeLibrary": "Synthesize papers I have already read"
 	},
 	"history": {
 		"aria": "Open chat history",
@@ -47,7 +48,9 @@
 	},
 	"tabs": {
 		"open": "Open conversation {{number}}",
-		"new": "Start a new conversation"
+		"new": "Start a new conversation",
+		"fork": "Fork conversation",
+		"forkConfirm": "Start a new Grok session (fork)? The vault thread stays; this tab will not replace it."
 	},
 	"agentMenu": {
 		"title": "ACP backend",
@@ -114,6 +117,8 @@
 	"empty": {
 		"title": "Chat with your vault",
 		"description": "Messages go to your ACP agent. Click the agent name above to switch backends.",
+		"continueTitle": "Continue the vault thread",
+		"continueDescription": "This vault already has a Gtero session. The next message resumes it instead of starting a new one.",
 		"waiting": "Waiting for agent…"
 	},
 	"thinking": "Thinking…",
@@ -171,6 +176,8 @@
 		"switchedTo": "Switched to {{name}}",
 		"desktopOnly": "Open the desktop app to run agents.",
 		"noAgent": "No available agent. Open Settings → Agent to configure one.",
-		"sessionUnavailable": "Could not restore this Agent session. Showing the saved answer snapshot when available."
+		"sessionUnavailable": "Could not restore this Agent session. Showing the saved answer snapshot when available.",
+		"sessionLost": "The vault Grok session could not be resumed. Start a new message to create a fresh thread.",
+		"sessionRetry": "The vault Grok session did not resume in time. Send again to retry the same thread."
 	}
 }

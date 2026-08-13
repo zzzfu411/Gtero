@@ -35,7 +35,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 ## 划词菜单
 
-选区后：高亮 / 批注 / 提问 / 加入对话 / 翻译。
+选区后：高亮 / 批注 / 提问 / 加入对话 / 翻译 / 解释 / 写入笔记。
 
 | 动作 | 落盘 | UI |
 |---|---|---|
@@ -44,9 +44,12 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针；**hover / 打开卡片时高亮**锚定选区原文；打开时停在用户问题处，不自动滚到回复底部；卡片右上角 ChatGPT / Claude 图标可把 论文标题 + 页码 + 划选文本 发送到对应外部 AI |
 | 加入对话 | 发送该轮后写 `marks/<id>.json`（kind `ask`） | 选区固定为 Agent composer 文本 chip；**发送**后在选区旁插入**对话卡片**页边针（与「提问」同一 ask 卡 / 非视觉批注）；hover / 打开同样高亮原文，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | 浮层结果卡：贴合选区随滚轮重定位；未悬停卡片 / 原文高亮 / 页边针时自动收起（流式中除外）。见 [translate.md](translate.md) |
+| 解释 | 同上，`mode: explain` | 概念卡片；页边灯泡针。走 Gtero sticky session，见 [gtero.md](gtero.md) |
+| 写入笔记 | `{paper}/NOTES.md` 当日 `## Gtero · 日期` 下追加引用块 + `Source (p.N)` + 已有解释/翻译（若有） | Toast；不覆盖已有笔记；不调 ACP |
 | 视觉批注 | `marks/<id>.json`（kind `visual` v2）：区域 + 用户批注 + 可选嵌套 `agent`；裁剪图 `marks/assets/<id>.png`。默认形态为纯批注（与文字「批注备注」同壳）；有 Agent 会话时可切到对话视图。旧版 `agent-trace` v1 仍可读，Doctor 可一键升 v2 | 框选后：**批注备注** 输入 + 取消/保存；右上角「加入侧边栏对话」。已落盘 pin：纯批注模式可改备注；有对话时右上角切换「编辑备注 / 查看对话」。续聊走 ACP 同一 session；`marks/annotations.json` 读写会按 annotation id 去重，避免重复导入脏数据 |
 
-- 不改 PDF 二进制；不自动写入 `NOTES.md`。
+- 不改 PDF 二进制。解释走 ACP；写入笔记是本地追加。
+- 提问 / 解释 / 翻译（Agent 提供方）默认 resume Vault 主线程。提问在 sticky resume 时不把卡片历史再塞进 prompt。
 - 提问 Agent 可与面板默认 Agent 分开配置。
 - 坐标归一化；多段 rect 支持双栏。
 - 页边针：用 PDFium `getPageTextRects` 判断是否压字。优先贴选区右侧，有字则试左侧；压字半透明，空白处实心。文字层未加载时保持实心。划词菜单仅在翻到选区下方时半透明。

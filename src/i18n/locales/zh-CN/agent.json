@@ -28,7 +28,8 @@
 		"summarizePaper": "总结当前论文",
 		"askLibrary": "就我的文献库提问",
 		"listClaims": "列出关键论点与证据",
-		"draftRelatedWork": "撰写相关工作（Related Work）"
+		"draftRelatedWork": "撰写相关工作（Related Work）",
+		"synthesizeLibrary": "综合我已读过的论文"
 	},
 	"history": {
 		"aria": "打开对话历史",
@@ -47,7 +48,9 @@
 	},
 	"tabs": {
 		"open": "打开会话 {{number}}",
-		"new": "新建会话"
+		"new": "新建会话",
+		"fork": "分叉会话",
+		"forkConfirm": "开启新的 Grok 会话（分叉）？知识库主线程会保留，这个标签不会替换它。"
 	},
 	"agentMenu": {
 		"title": "ACP 后端",
@@ -114,6 +117,8 @@
 	"empty": {
 		"title": "与你的知识库对话",
 		"description": "消息将发送给你的 ACP Agent。点击上方的 Agent 名称可切换后端。",
+		"continueTitle": "继续知识库线程",
+		"continueDescription": "这个知识库已有 Gtero 会话。下一条消息会恢复它，而不是新建。",
 		"waiting": "正在等待 Agent……"
 	},
 	"thinking": "思考中……",
@@ -171,6 +176,8 @@
 		"switchedTo": "已切换到 {{name}}",
 		"desktopOnly": "请打开桌面应用以运行 Agent。",
 		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。",
-		"sessionUnavailable": "无法恢复该 Agent 会话。若有本地回答快照会一并展示。"
+		"sessionUnavailable": "无法恢复该 Agent 会话。若有本地回答快照会一并展示。",
+		"sessionLost": "无法恢复知识库 Grok 会话。再发一条消息以创建新线程。",
+		"sessionRetry": "暂时无法恢复知识库 Grok 会话。请再发一条消息以重试同一线程。"
 	}
 }

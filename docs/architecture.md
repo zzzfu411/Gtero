@@ -62,17 +62,18 @@ Apple 风格 8 色 → Host `paper_set_tags`（catalog `tags_json` 权威）。L
 
 BYOA，连接本机 ACP Agent。详见 [frontend/agent.md](frontend/agent.md) / [backend/agent.md](backend/agent.md)。
 
-- **空态**：建议 chips → `summary` / `qa` / `related_work`。
+- **空态**：建议 chips → `summary` / `qa` / `related_work` / `corpus_synthesis`。
 - **上下文**：当前论文默认加入（实心 chip，可 X 移除）。`@` 提及与文件树拖入为可移除 context chip。
 - **选区上下文**：Markdown/PDF 选中文字 → 瞬时选区 chip（虚线）；`⌘L` 或「加入对话」固定为 chip。发送时以引用块消费；PDF 带几何的选区在发送后插入 `kind: ask` 对话卡片页边针（非视觉批注）。
 - **运行中继续输入**：后续消息进 Queue waitlist，当前回复结束后自动发送。
 - **权限**：全局模式 `restricted`（默认）/ `ask` / `auto`。`ask` 时弹权限对话框。
 - **结构化提问**：各 harness 的 ask-user / elicitation / Grok ext 归一为底部问卷（与 free-text composer 互斥）。详见 [frontend/agent.md](frontend/agent.md) / [backend/agent.md](backend/agent.md)。
+- **Gtero**：默认每 Vault 一条 sticky Grok 会话；划词解释 / 精读 / 库综合复用主线程。详见 [frontend/gtero.md](frontend/gtero.md)。
 - **个人偏好**：`agentPersonalPrompt` 非空时经 Host `build_prompt` 注入 envelope。
 
 ### PDF 阅读
 
-Vault 任意路径 `.pdf` → `blob:` 预览。页码导航/适应宽·整页/大纲/⌘F 查找。真实 scale 渲染 + 平滑划词覆盖层。划词菜单：高亮/批注/提问/翻译。支持视觉区域批注（框选插图/表/算法/公式，可写备注或向 Agent 提问）、版面分析（Figures 侧栏列出检测到的图/表/算法/公式）、有编号公式 hover 符号解析卡。详见 [frontend/pdf.md](frontend/pdf.md) / [frontend/pdf-layout-analysis.md](frontend/pdf-layout-analysis.md)。
+Vault 任意路径 `.pdf` → `blob:` 预览。页码导航/适应宽·整页/大纲/⌘F 查找。真实 scale 渲染 + 平滑划词覆盖层。划词菜单：高亮/批注/提问/翻译/解释/写入笔记。支持视觉区域批注（框选插图/表/算法/公式，可写备注或向 Agent 提问）、版面分析（Figures 侧栏列出检测到的图/表/算法/公式）、有编号公式 hover 符号解析卡。详见 [frontend/pdf.md](frontend/pdf.md) / [frontend/pdf-layout-analysis.md](frontend/pdf-layout-analysis.md) / [frontend/gtero.md](frontend/gtero.md)。
 
 ### Markdown 编辑
 
@@ -87,6 +88,7 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 | 层 | 内容 | 位置 |
 |---|---|---|
 | 文件 | NOTES、PDF、TeX、Markdown、assets | Vault 内 |
+| Gtero 会话 | 每库 ACP session id | `{vault}/.agentero/grok-workspace.json` |
 | Catalog | 论文集合 + metadata | `.agentero/catalog.sqlite` |
 | 阅读标注 | 高亮、划词问答、翻译、视觉批注 | `{paper}/marks/` |
 | 版面分析 | 原始 layout regions / 侧栏索引 | `{paper}/source/layout.json` / `layout-index.json` |
@@ -99,7 +101,7 @@ Plate + `@platejs/markdown`。普通文本粘贴默认按 Markdown 解析。右�
 
 ### 国际化
 
-所有面向用户文案经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [frontend/settings.md](frontend/settings.md#i18n)。
+所有面向用户文案经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [frontend/settings.md](frontend/settings.md#i18n)。`test/i18n-parity.test.ts` 校验两套 locale 的 namespace 与 key 集合一致。
 
 ### 外部改动自动重载
 

@@ -292,6 +292,7 @@ export const SUGGESTION_KEYS = [
 	"askLibrary",
 	"listClaims",
 	"draftRelatedWork",
+	"synthesizeLibrary",
 ] as const;
 
 export type SuggestionKey = (typeof SUGGESTION_KEYS)[number];
@@ -306,6 +307,7 @@ export const SUGGESTION_WORKFLOW: Record<SuggestionKey, string> = {
 	askLibrary: "qa",
 	listClaims: "qa",
 	draftRelatedWork: "related_work",
+	synthesizeLibrary: "corpus_synthesis",
 };
 
 export type AgentOption = {

@@ -100,6 +100,7 @@ export function ChatTranscript({
 	agentName,
 	compact = false,
 	activeTabIsRunning,
+	continueVaultThread = false,
 	submitting,
 	switching,
 	editingLineId,
@@ -119,6 +120,7 @@ export function ChatTranscript({
 	agentName: string;
 	compact?: boolean;
 	activeTabIsRunning: boolean;
+	continueVaultThread?: boolean;
 	submitting: boolean;
 	switching: boolean;
 	editingLineId: string | null;
@@ -155,8 +157,16 @@ export function ChatTranscript({
 				<div className="flex w-full flex-col gap-8">
 					{lines.length === 0 ? (
 						<ConversationEmptyState
-							title={t("empty.title")}
-							description={t("empty.description")}
+							title={
+								continueVaultThread
+									? t("empty.continueTitle")
+									: t("empty.title")
+							}
+							description={
+								continueVaultThread
+									? t("empty.continueDescription")
+									: t("empty.description")
+							}
 						>
 							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
 								{activeTabIsRunning ? (

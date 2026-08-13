@@ -28,7 +28,6 @@ import {
 	ensureCatalogAgent,
 	loadModelPref,
 	type PromptImage,
-	runOnce,
 } from "@/lib/agent";
 import {
 	type AgentSessionRecord,
@@ -46,6 +45,12 @@ import {
 	upsertChatSessionTurn,
 } from "@/lib/agent/chat-state";
 import type { AgentComposerState } from "@/lib/agent/composer-state";
+import { buildCorpusSynthesisPrompt } from "@/lib/agent/gtero-prompts";
+import {
+	handleGteroResumeFailure,
+	runOnceGtero,
+} from "@/lib/agent/gtero-run";
+import { formatFocusBlock, notesRelForPaper } from "@/lib/agent/paper-context";
 import {
 	consumeSelections,
 	currentSelections,
@@ -53,6 +58,10 @@ import {
 } from "@/lib/agent/selection-store";
 import type { AcpCommand } from "@/lib/agent/slash-commands";
 import { assembleTurnPrompt } from "@/lib/agent/turn-prompt";
+import {
+	classifyGteroResumeError,
+	isGteroEnabled,
+} from "@/lib/agent/vault-session";
 import {
 	consumeVisualDrafts,
 	currentVisualDrafts,
@@ -122,6 +131,9 @@ export type UseAgentSendOptions = {
 		| "submittingRef"
 		| "switchingRef"
 		| "vaultPathRef"
+		| "forkPendingRef"
+		| "pendingForkSessionIdsRef"
+		| "lastFocusBlockRef"
 	>;
 	t: AgentPanelT;
 	i18nLanguage: string;
@@ -154,6 +166,8 @@ export type UseAgentSendOptions = {
 	acpCommandsByAgent: Record<string, AcpCommand[]>;
 	contextPaths: string[];
 	selectedVaultPath: string | null;
+	selectedPaperTitle: string | null;
+	setVaultThreadId: Dispatch<SetStateAction<string | null>>;
 	snapshotComposerState: () => AgentComposerState;
 	completeComposerSubmission: (
 		sessionId: string,
@@ -203,6 +217,9 @@ export function useAgentSend({
 		submittingRef,
 		switchingRef,
 		vaultPathRef,
+		forkPendingRef,
+		pendingForkSessionIdsRef,
+		lastFocusBlockRef,
 	},
 	t,
 	i18nLanguage,
@@ -231,6 +248,8 @@ export function useAgentSend({
 	acpCommandsByAgent,
 	contextPaths,
 	selectedVaultPath,
+	selectedPaperTitle,
+	setVaultThreadId,
 	snapshotComposerState,
 	completeComposerSubmission,
 	setComposerText,
@@ -301,6 +320,7 @@ export function useAgentSend({
 		submittingRef.current = true;
 		setSubmitting(true);
 		setStoreSubmitting(true);
+		let forked = false;
 		try {
 			if (!isTauri()) {
 				setLines((p) => [...p, errorChatLine(t("messages.desktopOnly"))]);
@@ -368,6 +388,7 @@ export function useAgentSend({
 			if (forceNewSessionEarly) {
 				// Drop any panel-level continue target before resolving resume.
 				activeConversationRef.current = null;
+				lastFocusBlockRef.current = "";
 			}
 			const activeHistory = forceNewSessionEarly
 				? undefined
@@ -389,16 +410,32 @@ export function useAgentSend({
 			const priorLines = forceNewSessionEarly
 				? (options?.baseLines ?? [])
 				: (options?.baseLines ?? lines);
-			const { prompt, images, visualAnnotations, historyTitle } =
-				assembleTurnPrompt({
-					text,
-					contextPaths: resolvedContextPaths,
-					selections: resolvedSelections,
-					visualDrafts: resolvedVisualDrafts,
-					attachedImages,
-					isAcpCommand,
-					t,
+			const userText =
+				options?.workflow === "corpus_synthesis"
+					? buildCorpusSynthesisPrompt(selectedVaultPath ?? undefined)
+					: text;
+			const assembled = assembleTurnPrompt({
+				text: userText,
+				contextPaths: resolvedContextPaths,
+				selections: resolvedSelections,
+				visualDrafts: resolvedVisualDrafts,
+				attachedImages,
+				isAcpCommand,
+				t,
+			});
+			let { prompt } = assembled;
+			const { images, visualAnnotations, historyTitle } = assembled;
+			if (isGteroEnabled() && selectedVaultPath) {
+				const focusBlock = formatFocusBlock({
+					paperRel: selectedVaultPath,
+					title: selectedPaperTitle ?? undefined,
+					notesRel: notesRelForPaper(selectedVaultPath),
 				});
+				if (focusBlock && focusBlock !== lastFocusBlockRef.current) {
+					prompt = prompt ? `${prompt}\n\n${focusBlock}` : focusBlock;
+					lastFocusBlockRef.current = focusBlock;
+				}
+			}
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
 			const workflow = isAcpCommand ? undefined : options?.workflow;
@@ -421,9 +458,15 @@ export function useAgentSend({
 			// id, not the provider id used to resume ACP. Keep this empty until the
 			// host accepts the request, then bind it to accepted.sessionId below.
 			pendingSubmissionSessionIdRef.current = null;
-			const accepted = await runOnce({
+			forked = forkPendingRef.current;
+			forkPendingRef.current = false;
+			// Pin "new mark" and explicit forks both session/new; only "+" forks
+			// are recorded on the vault binder (do not replace primary).
+			const startNew = forked || forceNewSessionEarly;
+			const accepted = await runOnceGtero({
 				agentId,
-				sessionId: resumeSessionId,
+				sessionId: startNew ? undefined : resumeSessionId,
+				fork: startNew,
 				prompt,
 				isAcpCommand,
 				images,
@@ -442,10 +485,12 @@ export function useAgentSend({
 				autoApprove: loadSettings().agentPermissionMode === "auto",
 				permissionMode: loadSettings().agentPermissionMode,
 			});
+			if (forked) pendingForkSessionIdsRef.current.add(accepted.sessionId);
 			if (
 				sessionContextGeneration !== sessionContextGenRef.current ||
 				requestVaultPath !== vaultPathRef.current
 			) {
+				pendingForkSessionIdsRef.current.delete(accepted.sessionId);
 				pendingTerminalEventsRef.current.delete(accepted.sessionId);
 				pendingSessionEventsRef.current.delete(accepted.sessionId);
 				void cancelAgentRun(accepted.sessionId).catch(() => undefined);
@@ -584,11 +629,28 @@ export function useAgentSend({
 			}
 			return pendingTerminal?.kind !== "failed";
 		} catch (e) {
+			if (forked) forkPendingRef.current = true;
 			if (
 				sessionContextGeneration === sessionContextGenRef.current &&
 				requestVaultPath === vaultPathRef.current
 			) {
-				setLines((p) => [...p, errorChatLine(errorText(e))]);
+				const raw = errorText(e);
+				const classified = classifyGteroResumeError(raw);
+				const display = await handleGteroResumeFailure({
+					error: e,
+					copy: {
+						sessionLost: t("messages.sessionLost"),
+						sessionRetry: t("messages.sessionRetry"),
+						fallback: raw,
+					},
+				});
+				if (classified.kind === "rejected") {
+					forkPendingRef.current = false;
+					activeConversationRef.current = null;
+					setVaultThreadId(null);
+					lastFocusBlockRef.current = "";
+				}
+				setLines((p) => [...p, errorChatLine(display)]);
 			}
 			return false;
 		} finally {

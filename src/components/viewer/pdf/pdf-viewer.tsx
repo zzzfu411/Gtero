@@ -149,6 +149,7 @@ type TranslatePinAnchor = {
 	rects: PdfTranslateRect[];
 	preview: string;
 	hasError: boolean;
+	mode?: "translate" | "explain";
 };
 
 /** Compact value fingerprint of normalized rects (pin geometry input). */
@@ -575,6 +576,8 @@ function PdfViewerInner({
 		translateStreaming,
 		translateError,
 		translateSelection,
+		explainSelection,
+		writeSelectionNotes,
 		deleteTranslateCard,
 		openTranslateSettings,
 		clearTranslateError,
@@ -701,11 +704,12 @@ function PdfViewerInner({
 				rects: tr.rects,
 				preview: tr.quote?.trim() || tr.id,
 				hasError: Boolean(tr.error),
+				mode: tr.mode,
 			})),
 		translates
 			.map(
 				(tr) =>
-					`${tr.id}|${tr.page}|${tr.error ? 1 : 0}|${tr.quote ?? ""}|${rectsKey(tr.rects)}`,
+					`${tr.id}|${tr.page}|${tr.error ? 1 : 0}|${tr.quote ?? ""}|${tr.mode ?? ""}|${rectsKey(tr.rects)}`,
 			)
 			.join(";"),
 	);
@@ -760,6 +764,7 @@ function PdfViewerInner({
 			add(anchor.page, {
 				id: anchor.id,
 				kind: "translate",
+				variant: anchor.mode === "explain" ? "explain" : undefined,
 				x: pin.x,
 				y: pin.y,
 				preview: anchor.preview,
@@ -1128,6 +1133,28 @@ function PdfViewerInner({
 		translateSelection,
 	]);
 
+	const handleMenuExplain = useCallback(() => {
+		if (!selectionMenu) return;
+		const anchor = selectionMenu.anchor;
+		setSelectionMenu(null);
+		selectionCap?.clear(docId);
+		explainSelection(anchor);
+	}, [selectionMenu, selectionCap, docId, setSelectionMenu, explainSelection]);
+
+	const handleMenuWriteNotes = useCallback(() => {
+		if (!selectionMenu) return;
+		const anchor = selectionMenu.anchor;
+		setSelectionMenu(null);
+		selectionCap?.clear(docId);
+		writeSelectionNotes(anchor);
+	}, [
+		selectionMenu,
+		selectionCap,
+		docId,
+		setSelectionMenu,
+		writeSelectionNotes,
+	]);
+
 	// ---- In-PDF highlight selection menu ----
 
 	const handleEditHighlightAnnotation = useCallback(
@@ -1405,6 +1432,8 @@ function PdfViewerInner({
 					onAsk: handleMenuAsk,
 					onAddToChat: handleMenuAddToChat,
 					onTranslate: handleMenuTranslate,
+					onExplain: handleMenuExplain,
+					onWriteNotes: handleMenuWriteNotes,
 					onClose: closeSelectionMenu,
 				}}
 				visualDraft={{

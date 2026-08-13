@@ -1,5 +1,6 @@
 import {
 	Languages,
+	Lightbulb,
 	MessageSquare,
 	MessageSquareText,
 	ScanSearch,
@@ -79,8 +80,9 @@ function layoutPins(
 	}));
 }
 
-function pinIcon(kind: SelectionPin["kind"]) {
-	switch (kind) {
+function pinIcon(pin: SelectionPin) {
+	if (pin.variant === "explain") return Lightbulb;
+	switch (pin.kind) {
 		case "ask":
 			return MessageSquare;
 		case "annotate":
@@ -122,7 +124,7 @@ export const SelectionGutter = memo(function SelectionGutter({
 			{laid.map((pos) => {
 				const item = byId.get(pos.id);
 				if (!item) return null;
-				const Icon = pinIcon(item.kind);
+				const Icon = pinIcon(item);
 				const aria =
 					item.kind === "ask"
 						? t("pdfAsk.pillAria", { preview: item.preview })
@@ -130,7 +132,9 @@ export const SelectionGutter = memo(function SelectionGutter({
 							? t("annotations.pinAria", { preview: item.preview })
 							: item.kind === "visual" || item.kind === "agent-trace"
 								? t("pdfExplain.tracePinAria", { preview: item.preview })
-								: t("selection.translatePinAria", { preview: item.preview });
+								: item.variant === "explain"
+									? t("selection.explainPinAria", { preview: item.preview })
+									: t("selection.translatePinAria", { preview: item.preview });
 				// agent-trace activeCard.id is the per-annotation pin id.
 				const isActive = activeId === item.id;
 				// Opacity may change on hover/active; transform must stay fixed to
@@ -158,7 +162,9 @@ export const SelectionGutter = memo(function SelectionGutter({
 								item.kind === "ask" && item.ended
 									? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
 									: item.kind === "translate"
-										? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
+										? item.variant === "explain"
+											? "border-amber-600/35 bg-background text-amber-700 dark:text-amber-400"
+											: "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
 										: item.kind === "visual" || item.kind === "agent-trace"
 											? "border-violet-600/35 bg-background text-violet-700 dark:text-violet-400"
 											: "border-border/80 bg-background text-muted-foreground",

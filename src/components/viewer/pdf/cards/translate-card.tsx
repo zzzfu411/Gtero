@@ -1,4 +1,10 @@
-import { Languages, MinusIcon, Settings2Icon, Trash2Icon } from "lucide-react";
+import {
+	Languages,
+	Lightbulb,
+	MinusIcon,
+	Settings2Icon,
+	Trash2Icon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -13,6 +19,7 @@ type TranslateCardProps = {
 	result: string;
 	streaming: boolean;
 	error: string | null;
+	mode?: "translate" | "explain";
 	/** Open Translate settings from an API failure state. */
 	onOpenSettings: () => void;
 	/** Hide card; pin remains for reopen */
@@ -33,6 +40,7 @@ export function TranslateCard({
 	result,
 	streaming,
 	error,
+	mode = "translate",
 	onOpenSettings,
 	onHide,
 	onDelete,
@@ -51,8 +59,12 @@ export function TranslateCard({
 			// Content-sized: follow the selection pin while the PDF scrolls.
 			trackPin
 			preferRight={preferRight}
-			title={t("selection.translateTitle")}
-			icon={Languages}
+			title={
+				mode === "explain"
+					? t("selection.explainTitle")
+					: t("selection.translateTitle")
+			}
+			icon={mode === "explain" ? Lightbulb : Languages}
 			ariaLive="polite"
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
@@ -73,7 +85,9 @@ export function TranslateCard({
 		>
 			{showLoading ? (
 				<Shimmer className="text-sm" as="p">
-					{t("selection.translating")}
+					{mode === "explain"
+						? t("selection.explaining")
+						: t("selection.translating")}
 				</Shimmer>
 			) : null}
 
@@ -85,7 +99,9 @@ export function TranslateCard({
 
 			{!showLoading && !showResult && !error ? (
 				<p className="text-muted-foreground text-xs">
-					{t("selection.translating")}
+					{mode === "explain"
+						? t("selection.explaining")
+						: t("selection.translating")}
 				</p>
 			) : null}
 

@@ -4,6 +4,7 @@ import {
 	appendAskAssistantMessage,
 	createAskThreadFromAgentSelection,
 	createEmptyThread,
+	gteroUserFacingError,
 	parsePdfAskThread,
 	rememberPendingAskThreads,
 	resetPendingAskThreadsForTests,
@@ -171,7 +172,7 @@ describe("pdf-ask prompt", () => {
 			content: "Explain",
 			createdAt: new Date().toISOString(),
 		});
-		const p = buildPdfAskPrompt(thread, "Explain");
+		const p = buildPdfAskPrompt(thread, "Explain", { includeHistory: false });
 		expect(p).toContain("Page: 3");
 		expect(p).toContain("Transformer");
 		expect(p).toContain("Explain");
@@ -193,8 +194,142 @@ describe("pdf-ask prompt", () => {
 			content: "Explain this figure",
 			createdAt: new Date().toISOString(),
 		});
-		const prompt = buildPdfAskPrompt(thread, "Explain this figure");
+		const prompt = buildPdfAskPrompt(thread, "Explain this figure", {
+			includeHistory: false,
+		});
 		expect(prompt).toContain("figure, chart, table");
 		expect(prompt).toContain("Do not invent unreadable values");
+	});
+
+	it("omits earlier turns when the vault session will be resumed", () => {
+		const thread = createEmptyThread({
+			paperPath: "papers/x",
+			anchor: {
+				page: 3,
+				rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+				quote: "Transformer",
+				trigger: "selection",
+			},
+		});
+		thread.messages.push(
+			{
+				id: "u1",
+				role: "user",
+				content: "What is this?",
+				createdAt: new Date().toISOString(),
+			},
+			{
+				id: "a1",
+				role: "assistant",
+				content: "A unique prior answer about residual streams.",
+				createdAt: new Date().toISOString(),
+			},
+			{
+				id: "u2",
+				role: "user",
+				content: "And the next layer?",
+				createdAt: new Date().toISOString(),
+			},
+		);
+		const p = buildPdfAskPrompt(thread, "And the next layer?", {
+			includeHistory: false,
+		});
+		expect(p).toContain("And the next layer?");
+		expect(p).toContain("Transformer");
+		expect(p).not.toContain("Earlier turns");
+		expect(p).not.toContain("What is this?");
+		expect(p).not.toContain("A unique prior answer about residual streams.");
+	});
+
+	it("serializes earlier turns when the run will not resume a session", () => {
+		const thread = createEmptyThread({
+			paperPath: "papers/x",
+			anchor: {
+				page: 3,
+				rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+				quote: "Transformer",
+				trigger: "selection",
+			},
+		});
+		thread.messages.push(
+			{
+				id: "u1",
+				role: "user",
+				content: "What is this?",
+				createdAt: new Date().toISOString(),
+			},
+			{
+				id: "a1",
+				role: "assistant",
+				content: "A unique prior answer about residual streams.",
+				createdAt: new Date().toISOString(),
+			},
+			{
+				id: "u2",
+				role: "user",
+				content: "And the next layer?",
+				createdAt: new Date().toISOString(),
+			},
+		);
+		const p = buildPdfAskPrompt(thread, "And the next layer?", {
+			includeHistory: true,
+		});
+		expect(p).toContain("Earlier turns in this selection thread:");
+		expect(p).toContain("User: What is this?");
+		expect(p).toContain(
+			"Assistant: A unique prior answer about residual streams.",
+		);
+		expect(p).toContain("And the next layer?");
+		expect(p.indexOf("What is this?")).toBeLessThan(
+			p.lastIndexOf("And the next layer?"),
+		);
+	});
+});
+
+describe("gteroUserFacingError", () => {
+	it("maps resume failures to the i18n session-lost copy", async () => {
+		expect(
+			await gteroUserFacingError(new Error("session/resume: unknown session"), {
+				sessionLost: "SESSION_LOST",
+				sessionRetry: "SESSION_RETRY",
+				fallback: "FAILED",
+			}),
+		).toBe("SESSION_LOST");
+	});
+
+	it("maps a Host timeout to retry copy, not session-lost", async () => {
+		expect(
+			await gteroUserFacingError(
+				new Error('Internal error: "resume_session timed out after 15s"'),
+				{
+					sessionLost: "SESSION_LOST",
+					sessionRetry: "SESSION_RETRY",
+					fallback: "FAILED",
+				},
+			),
+		).toBe("SESSION_RETRY");
+	});
+
+	it("uses fallback for empty errors", async () => {
+		expect(
+			await gteroUserFacingError("", {
+				sessionLost: "SESSION_LOST",
+				sessionRetry: "SESSION_RETRY",
+				fallback: "FAILED",
+			}),
+		).toBe("FAILED");
+	});
+
+	it("does not leak the Host prefix in display text", async () => {
+		const display = await gteroUserFacingError(
+			new Error("gtero_resume_rejected: resume_session: gone"),
+			{
+				sessionLost: "SESSION_LOST",
+				sessionRetry: "SESSION_RETRY",
+				fallback: "FAILED",
+			},
+		);
+		expect(display).toBe("SESSION_LOST");
+		expect(display).not.toContain("gtero_resume_rejected:");
 	});
 });

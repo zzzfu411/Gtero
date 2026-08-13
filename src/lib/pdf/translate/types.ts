@@ -26,6 +26,8 @@ export type PdfTranslateRecord = {
 	rects: PdfTranslateRect[];
 	/** Source text that was translated */
 	quote?: string;
+	/** `explain` reuses this record for Gtero concept cards. */
+	mode?: "translate" | "explain";
 	/** Translation body (persisted so the card can be reopened) */
 	result?: string;
 	/** Last error message if the run failed */

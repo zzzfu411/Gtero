@@ -453,6 +453,7 @@ export function RightSidebar() {
 	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
 	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
 	const paperTreeLabelMode = useSettings((s) => s.paperTreeLabelMode);
+	const gteroEnabled = useSettings((s) => s.gtero.enabled);
 	const selectedPath = useWorkspaceStore(
 		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? null,
 	);
@@ -491,7 +492,7 @@ export function RightSidebar() {
 								paperMetaByRelPath={paperMetaByRelPath}
 								paperTreeLabelMode={paperTreeLabelMode}
 								className="min-h-0 h-full"
-								title={t("labels.agent")}
+								title={gteroEnabled ? t("labels.gtero") : t("labels.agent")}
 								autoFocus={rightSidebarOpen && rightSidebarTab === "agent"}
 								onOpenAgentSettings={onOpenAgentSettings}
 								onOpenSource={handleAgentOpenSource}

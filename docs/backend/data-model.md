@@ -21,6 +21,7 @@ Vault/
 └── .agentero/
     ├── catalog.sqlite
     ├── doctor.json     # 可选：Doctor 忽略列表等 Vault 本地偏好
+    ├── grok-workspace.json  # Gtero sticky session（首次记住会话后写入）
     └── .trash/
 ```
 

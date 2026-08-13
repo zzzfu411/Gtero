@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	createTranslateRecord,
+	finishedInsightForSelection,
+	parsePdfTranslateRecord,
+} from "@/lib/pdf/translate";
+import {
 	buildTranslatePrompt,
 	COMMERCIAL_MT_PROVIDER_IDS,
 	FREE_MT_PROVIDER_IDS,
@@ -209,5 +214,95 @@ describe("translate prompts", () => {
 		});
 		expect(p).toContain("page 3");
 		expect(p).toContain("attention");
+	});
+});
+
+describe("pdf translate record", () => {
+	it("keeps explain mode", () => {
+		const rec = parsePdfTranslateRecord({
+			version: 1,
+			kind: "translate",
+			id: "e1",
+			paperPath: "papers/x",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			page: 2,
+			rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+			quote: "decoder",
+			mode: "explain",
+		});
+		expect(rec?.mode).toBe("explain");
+	});
+
+	it("round-trips an explain record with result", () => {
+		const rec = createTranslateRecord({
+			paperPath: "papers/x",
+			page: 2,
+			rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+			quote: "decoder",
+			mode: "explain",
+			result: "A head that maps tokens to a scalar.",
+		});
+		const parsed = parsePdfTranslateRecord(JSON.parse(JSON.stringify(rec)));
+		expect(parsed?.mode).toBe("explain");
+		expect(parsed?.quote).toBe("decoder");
+		expect(parsed?.result).toBe("A head that maps tokens to a scalar.");
+		expect(parsed?.page).toBe(2);
+	});
+
+	it("prefers a finished explain insight for the same selection", () => {
+		const explain = createTranslateRecord({
+			id: "e1",
+			paperPath: "papers/x",
+			page: 3,
+			rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+			quote: "decoder-based heads",
+			mode: "explain",
+			result: "A head that maps tokens to a scalar.",
+		});
+		explain.updatedAt = "2026-01-01T00:00:01.000Z";
+		const translate = createTranslateRecord({
+			id: "t1",
+			paperPath: "papers/x",
+			page: 3,
+			rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+			quote: "decoder-based heads",
+			result: "基于解码器的头",
+		});
+		translate.updatedAt = "2026-01-01T00:00:02.000Z";
+		expect(
+			finishedInsightForSelection([translate, explain], {
+				quote: "decoder-based heads",
+				page: 3,
+			}),
+		).toBe("A head that maps tokens to a scalar.");
+	});
+
+	it("ignores in-flight or failed records", () => {
+		const streaming = createTranslateRecord({
+			id: "s1",
+			paperPath: "papers/x",
+			page: 3,
+			rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+			quote: "decoder-based heads",
+			mode: "explain",
+			result: "partial",
+		});
+		const failed = createTranslateRecord({
+			id: "f1",
+			paperPath: "papers/x",
+			page: 3,
+			rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+			quote: "decoder-based heads",
+			mode: "explain",
+			result: "stale",
+			error: "boom",
+		});
+		expect(
+			finishedInsightForSelection([streaming, failed], {
+				quote: "decoder-based heads",
+				page: 3,
+				excludeIds: ["s1"],
+			}),
+		).toBeNull();
 	});
 });

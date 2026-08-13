@@ -233,6 +233,16 @@
 		"autoPaperReader": {
 			"label": "入库后自动精读"
 		},
+		"gtero": {
+			"enabled": {
+				"label": "Gtero（Grok 知识库线程）",
+				"description": "每个知识库复用一条 Grok 会话：对话、PDF 提问/解释、精读。"
+			},
+			"sticky": {
+				"label": "粘性会话",
+				"description": "复用 `.agentero/grok-workspace.json`。关闭后每次运行都会新建 ACP 会话。"
+			}
+		},
 		"responseLanguage": {
 			"label": "回答语言",
 			"auto": "自动（跟随内容）",

@@ -26,7 +26,7 @@
 |---|---|
 | 智能入库 | 关键词/描述 → Agent 候选列表 → 确认入库 |
 | 入库编排 | 前端 `afterPaperImport` 统一后置；迁移/远程走同一 `paper_commit`；可选 `paper:imported` 事件 |
-| Agent | workflow 自动注入 Vault `AGENTS.md` |
+| Agent | workflow 自动注入 Vault `AGENTS.md`；**Gtero** 每库 sticky Grok 会话（已实现，见 [../frontend/gtero.md](../frontend/gtero.md)） |
 | 配置 | 最近 Vault / UI 偏好与 XDG settings 完全对齐；设置内打开/导出日志目录 |
 | 导出 | `catalog:export_papers_md`（Markdown 表） |
 | CLI | `graph` / shell completions；`export papers-md` 对齐（Doctor 已实现） |

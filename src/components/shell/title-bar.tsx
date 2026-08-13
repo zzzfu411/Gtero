@@ -24,6 +24,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useSettings } from "@/hooks/use-app-stores";
 import { cn } from "@/lib/core/utils";
 import { moveFeatureToWindow } from "@/lib/shell/leaf";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
@@ -75,6 +76,7 @@ export const TitleBar = memo(function TitleBar({
 	onOpenSettings,
 }: TitleBarProps) {
 	const { t } = useTranslation(["app"]);
+	const gteroEnabled = useSettings((s) => s.gtero.enabled);
 
 	return (
 		<header className="flex h-8 shrink-0 items-center border-b select-none">
@@ -139,7 +141,9 @@ export const TitleBar = memo(function TitleBar({
 									{
 										id: "agent" as const,
 										aria: t("titlebar.agentPanel"),
-										tooltip: t("labels.agent"),
+										tooltip: gteroEnabled
+											? t("labels.gtero")
+											: t("labels.agent"),
 										Icon: Bot,
 									},
 									{

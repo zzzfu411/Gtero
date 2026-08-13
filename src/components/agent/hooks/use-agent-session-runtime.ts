@@ -62,6 +62,15 @@ import {
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent/stream-parse";
+import {
+	clearGteroRunAttempt,
+	handleGteroResumeFailure,
+} from "@/lib/agent/gtero-run";
+import {
+	classifyGteroResumeError,
+	isGteroSticky,
+	rememberGteroSession,
+} from "@/lib/agent/vault-session";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	completeTrace,
@@ -89,7 +98,11 @@ export type UseAgentSessionRuntimeOptions = {
 		| "sessionHistoryRef"
 		| "submittingRef"
 		| "thinkParsersRef"
+		| "vaultPathRef"
+		| "pendingForkSessionIdsRef"
+		| "lastFocusBlockRef"
 	>;
+	setVaultThreadId: Dispatch<SetStateAction<string | null>>;
 	t: AgentPanelT;
 	setSessionHistory: (
 		update:
@@ -142,8 +155,12 @@ export function useAgentSessionRuntime({
 		sessionHistoryRef,
 		submittingRef,
 		thinkParsersRef,
+		vaultPathRef,
+		pendingForkSessionIdsRef,
+		lastFocusBlockRef,
 	},
 	t,
+	setVaultThreadId,
 	setSessionHistory,
 	applyModelsEvent,
 	applyCollaborationEvent,
@@ -391,7 +408,17 @@ export function useAgentSessionRuntime({
 							: item,
 					),
 				);
+				const vault = vaultPathRef.current;
+				if (vault && isGteroSticky()) {
+					const forked = pendingForkSessionIdsRef.current.delete(ev.sessionId);
+					void rememberGteroSession(vault, ev.providerSessionId, {
+						fork: forked,
+					}).then((binder) => {
+						setVaultThreadId(binder.primarySessionId);
+					});
+				}
 			}
+			clearGteroRunAttempt(ev.sessionId);
 			if (ev.stopReason === "cancelled") {
 				const cancelledLine: ChatLine = {
 					id: nextLineId("sys"),
@@ -514,46 +541,70 @@ export function useAgentSessionRuntime({
 			thinkParsersRef,
 			updateSessionLines,
 			setSessionHistory,
+			vaultPathRef,
+			pendingForkSessionIdsRef,
+			setVaultThreadId,
 		],
 	);
 
 	const failSession = useCallback(
 		(sessionId: string, error: string) => {
 			if (!isChatOwnedSession(sessionId)) return;
-			const failedLine: ChatLine = errorChatLine(error);
-			updateSessionLines(sessionId, (prev) => {
-				const next = [...prev];
-				const last = next[next.length - 1];
-				if (last?.kind === "agent" && last.streaming) {
-					if (agentHasContent(last.parts)) {
-						next[next.length - 1] = {
-							...last,
-							streaming: false,
-						};
-					} else {
-						next.pop();
-					}
+			pendingForkSessionIdsRef.current.delete(sessionId);
+			void handleGteroResumeFailure({
+				error,
+				localSessionId: sessionId,
+				copy: {
+					sessionLost: t("messages.sessionLost"),
+					sessionRetry: t("messages.sessionRetry"),
+					fallback: error,
+				},
+			}).then((display) => {
+				if (classifyGteroResumeError(error).kind === "rejected") {
+					activeConversationRef.current = null;
+					setVaultThreadId(null);
+					lastFocusBlockRef.current = "";
 				}
-				return [...next, failedLine];
-			});
-			setSessionHistory((prev) =>
-				prev.map((item) =>
-					item.id === sessionId ? { ...item, status: "failed" } : item,
-				),
-			);
-			void finalizeVisualTraces(sessionId, {
-				kind: "failed",
-				error,
-			});
-			void finalizeAskThreads(sessionId, {
-				kind: "failed",
-				error,
+				const failedLine: ChatLine = errorChatLine(display);
+				updateSessionLines(sessionId, (prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
+					if (last?.kind === "agent" && last.streaming) {
+						if (agentHasContent(last.parts)) {
+							next[next.length - 1] = {
+								...last,
+								streaming: false,
+							};
+						} else {
+							next.pop();
+						}
+					}
+					return [...next, failedLine];
+				});
+				setSessionHistory((prev) =>
+					prev.map((item) =>
+						item.id === sessionId ? { ...item, status: "failed" } : item,
+					),
+				);
+				void finalizeVisualTraces(sessionId, {
+					kind: "failed",
+					error: display,
+				});
+				void finalizeAskThreads(sessionId, {
+					kind: "failed",
+					error: display,
+				});
 			});
 		},
 		[
+			activeConversationRef,
 			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
+			lastFocusBlockRef,
+			pendingForkSessionIdsRef,
+			setVaultThreadId,
+			t,
 			updateSessionLines,
 			setSessionHistory,
 		],

@@ -1,6 +1,6 @@
 ---
 name: paper-reader
-version: 1
+version: 2
 description: >-
   Read and explain a research paper clearly (prefer TeX, else PAPER.md/PDF).
   Use for core contribution, method deep-dive, experiments, limitations, and
@@ -23,9 +23,10 @@ who refuses vague academic filler. Prefer concrete examples over empty jargon.
   2. `{paper}/PAPER.md` (liteparse / structured body)
   3. If no TeX or `PAPER.md` exists, run `agentero paper parse {paper}` and then read the generated `PAPER.md`
   4. Local PDF under the paper folder (e.g. `{id}.pdf`)
-- Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import.
-  - Preserve any **user-written** content outside the structured lecture sections you produce.
-  - Fill or replace the structured lecture body (sections below).
+- Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import, or a previous Gtero / paper-reader run.
+  - Preserve any **user-written** content. Do not wipe the file.
+  - If NOTES.md already has substantial notes, **append** a new section headed `## Gtero · YYYY-MM-DD` (today's date) instead of replacing the lecture body.
+  - Only fill or replace the structured lecture sections when the file is still an import stub (title/abstract shell with no real notes).
   - Ensure YAML frontmatter `aliases` and note-creation date (see below).
 - Do not delete `marks/`, `source/`, assets, or binary files.
 
@@ -171,7 +172,9 @@ term.
 4. Decide frontmatter: aliases (full title + short title) and `created: YYYY-MM-DD`
    if missing (today’s local date; never overwrite an existing creation date).
 5. Generate the structured notes.
-6. Write / update `{paper}/NOTES.md` (frontmatter + lecture body; preserve user prose).
+6. Write / update `{paper}/NOTES.md` (frontmatter + lecture body; preserve user prose):
+   - If the file is an import stub, write the five lecture sections in order.
+   - If it already has substantial notes, append `## Gtero · YYYY-MM-DD` plus the lecture body. Never replace the whole file.
 7. Run `agentero wiki check {paper}/NOTES.md --json`.
    - Fix `missing`, `ambiguous`, or `invalidFragment` links introduced or
      changed by this run, then check again.
@@ -185,4 +188,5 @@ term.
 - Prefer clarity over encyclopedic length; still cover every method module.
 - Never invent experimental numbers; if something is unclear, say so.
 - Math must use `$...$` / `$$...$$` so Agentero can render it (see vault `AGENTS.md`).
+- Never overwrite user-written NOTES.md. Append `## Gtero · YYYY-MM-DD` on re-read.
 - Final deliverable path: `{paper}/NOTES.md` only for the lecture notes body.

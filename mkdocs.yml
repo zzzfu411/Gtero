@@ -47,6 +47,7 @@ nav:
       - PDF 阅读与划词: frontend/pdf.md
       - PDF 版面分析（实验）: frontend/pdf-layout-analysis.md
       - Agent 面板: frontend/agent.md
+      - Gtero: frontend/gtero.md
       - 移动端: frontend/mobile.md
       - 双链 UI: frontend/wiki.md
       - 命令面板: frontend/command-palette.md

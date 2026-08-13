@@ -102,6 +102,26 @@ pub struct AppSettings {
     /// PostHog product analytics opt-out (applies from the next launch).
     #[serde(default = "default_true")]
     pub telemetry_enabled: bool,
+    #[serde(default)]
+    pub gtero: GteroSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GteroSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub sticky: bool,
+}
+
+impl Default for GteroSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            sticky: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -230,6 +250,7 @@ impl Default for AppSettings {
             layout: LayoutSettings::default(),
             export_watermark_enabled: false,
             telemetry_enabled: default_true(),
+            gtero: GteroSettings::default(),
         }
     }
 }
@@ -840,6 +861,85 @@ mod tests {
             .find(|c| c.key == "authors")
             .unwrap();
         assert!(authors.visible);
+    }
+
+    #[test]
+    fn gtero_defaults_when_key_missing() {
+        let s: AppSettings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert!(s.gtero.enabled);
+        assert!(s.gtero.sticky);
+        assert_eq!(s.theme, "dark");
+    }
+
+    #[test]
+    fn gtero_empty_object_defaults_on() {
+        let s: AppSettings = serde_json::from_str(r#"{"gtero":{}}"#).unwrap();
+        assert!(s.gtero.enabled);
+        assert!(s.gtero.sticky);
+    }
+
+    #[test]
+    fn gtero_partial_object_fills_missing_fields_true() {
+        let s: AppSettings = serde_json::from_str(r#"{"gtero":{"enabled":false}}"#).unwrap();
+        assert!(!s.gtero.enabled);
+        assert!(s.gtero.sticky);
+    }
+
+    #[test]
+    fn gtero_unknown_keys_are_ignored() {
+        let s: AppSettings = serde_json::from_str(
+            r#"{"gtero":{"enabled":false,"sticky":false,"futureFlag":true},"brandNew":1}"#,
+        )
+        .unwrap();
+        assert!(!s.gtero.enabled);
+        assert!(!s.gtero.sticky);
+    }
+
+    #[test]
+    fn gtero_wire_keys_are_camel_case() {
+        let json = serde_json::to_value(AppSettings::default()).unwrap();
+        let gtero = json.get("gtero").expect("gtero on the wire");
+        assert_eq!(gtero.get("enabled"), Some(&serde_json::Value::Bool(true)));
+        assert_eq!(gtero.get("sticky"), Some(&serde_json::Value::Bool(true)));
+    }
+
+    #[test]
+    fn gtero_file_roundtrip_preserves_user_values() {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("agentero-settings-gtero-{n}"));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("settings.json");
+
+        fs::write(&path, r#"{"theme":"light"}"#).unwrap();
+        let (loaded, existed) = read_file(&path);
+        assert!(existed);
+        assert!(loaded.gtero.enabled);
+        assert!(loaded.gtero.sticky);
+
+        let mut s = loaded;
+        s.gtero.enabled = false;
+        s.gtero.sticky = false;
+        persist(&path, &s).expect("write");
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(raw.contains("\"gtero\""));
+        assert!(raw.contains("\"enabled\": false"));
+        assert!(raw.contains("\"sticky\": false"));
+
+        let (reloaded, _) = read_file(&path);
+        assert!(!reloaded.gtero.enabled);
+        assert!(!reloaded.gtero.sticky);
+
+        let mut next = reloaded;
+        next.gtero.enabled = true;
+        persist(&path, &next).unwrap();
+        let (again, _) = read_file(&path);
+        assert!(again.gtero.enabled);
+        assert!(!again.gtero.sticky);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
 

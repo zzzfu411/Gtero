@@ -28,6 +28,7 @@ export function createTranslateRecord(input: {
 	quote?: string;
 	result?: string;
 	error?: string;
+	mode?: "translate" | "explain";
 	id?: string;
 }): PdfTranslateRecord {
 	const now = new Date().toISOString();
@@ -41,6 +42,7 @@ export function createTranslateRecord(input: {
 		page: Math.max(1, Math.floor(input.page)),
 		rects: input.rects,
 	};
+	if (input.mode === "explain") rec.mode = "explain";
 	if (input.quote?.trim()) rec.quote = input.quote.trim();
 	if (input.result?.trim()) rec.result = input.result.trim();
 	if (input.error?.trim()) rec.error = input.error.trim();

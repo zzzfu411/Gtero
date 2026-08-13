@@ -15,6 +15,7 @@
 - [ ] 前端 `afterPaperImport` 策略表统一各入口后置
 - [ ] Zotero 迁移走 `paper_commit`；remote 镜像层收敛；统一 `paper:imported` 事件
 - [x] workflow prompt 自动注入 Vault 内 `AGENTS.md`（Host `build_prompt` 已将 `AGENTS.md` 作为 progressive disclosure 系统上下文注入）
+- [x] Gtero：每 Vault 一条 Grok sticky session；PDF 解释 / NOTES 追加 / 库综合（见 [../frontend/gtero.md](../frontend/gtero.md)）
 - [ ] 最近 Vault / UI 偏好与 XDG settings 完全对齐
 - [ ] 设置「打开/导出日志文件夹」
 - [ ] `catalog:export_papers_md`（Markdown 表）

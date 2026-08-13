@@ -90,3 +90,21 @@ fn generate_onboarding_templates() {
 
     fs::write(generated, source).expect("write generated onboarding templates");
 }
+
+// Windows `cargo test --lib` dies at process start with STATUS_ENTRYPOINT_NOT_FOUND
+// (0xC0000139): the unit-test exe imports `TaskDialogIndirect` from comctl32 v6,
+// while `tauri-build` only embeds that SxS manifest into bins (`rustc-link-arg-bins`).
+// Cargo cannot scope a linker flag to the lib test harness without touching
+// shipped artifacts:
+// - `cargo:rustc-link-arg-tests` applies only to `tests/` integration tests
+//   (rejected when none exist; still unused by `src/` unit tests — rust-lang/cargo#10937).
+// - `cargo:rustc-link-arg` also hits bins/cdylibs, including the Windows release
+//   installer. `PROFILE` cannot distinguish: `cargo test` and `cargo build` both
+//   use `PROFILE=debug` unless `--release` is passed.
+// Do not add `/MANIFESTDEPENDENCY:…Common-Controls`. CI tests on macos-14 only.
+// Local Windows workaround (env only; do not bake the linker arg into this file):
+//   $env:CARGO_ENCODED_RUSTFLAGS = "-Clink-arg=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+//   cargo test -p agentero --lib
+// Prefer `CARGO_ENCODED_RUSTFLAGS` over `RUSTFLAGS`: Cargo splits the latter on
+// whitespace, and this flag contains spaces. Changing it invalidates the build
+// cache; the first run recompiles.

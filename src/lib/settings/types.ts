@@ -206,6 +206,19 @@ export type AppSettings = {
 	translate: TranslateSettings;
 	/** PDF layout-analysis backend (local ONNX or remote PP-StructureV3). */
 	layout: LayoutSettings;
+	/**
+	 * Gtero: Grok-first paper workspace (sticky vault session, selection explain).
+	 * Disable to restore stock BYOA “new ACP session per chat/reader run”.
+	 */
+	gtero: GteroSettings;
+};
+
+/** Grok-first paper-reader layer on top of BYOA ACP. */
+export type GteroSettings = {
+	/** Product defaults on. Off = upstream Agentero session behavior. */
+	enabled: boolean;
+	/** Resume `.agentero/grok-workspace.json` primary session instead of session/new. */
+	sticky: boolean;
 };
 
 /** PDF selection Ask (question popover) agent/model prefs. */

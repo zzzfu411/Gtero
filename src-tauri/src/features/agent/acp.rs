@@ -128,6 +128,23 @@ async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
 /// Shared budget for ACP initialize / session RPCs and settings probe.
 const ACP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
+/// Machine-readable prefix for a permanent `session/resume` rejection.
+///
+/// The string the frontend classifies — both `agent:failed.error` and the
+/// `AppError` Display / `runOnce` rejection message — **must start with** this
+/// exact token (trailing space included) when the agent refused the sticky
+/// session id. Timeouts, transport loss, user/agent cancellation, auth, and a
+/// missing `session/resume` capability must **not** carry it, so Gtero can keep
+/// a vault thread that is probably still alive.
+const GTERO_RESUME_REJECTED_PREFIX: &str = "gtero_resume_rejected: ";
+
+fn acp_timeout_err(label: &str) -> agent_client_protocol::Error {
+    acp_err(format!(
+        "{label} timed out after {}s",
+        ACP_TIMEOUT.as_secs()
+    ))
+}
+
 async fn timed_acp_request<T, E>(
     label: &str,
     request: impl std::future::Future<Output = Result<T, E>>,
@@ -137,13 +154,72 @@ where
 {
     tokio::time::timeout(ACP_TIMEOUT, request)
         .await
-        .map_err(|_| {
-            acp_err(format!(
-                "{label} timed out after {}s",
-                ACP_TIMEOUT.as_secs()
-            ))
-        })?
+        .map_err(|_| acp_timeout_err(label))?
         .map_err(|error| acp_err(format!("{label}: {error}")))
+}
+
+/// True when a `session/resume` error is not evidence that the id is worthless.
+///
+/// Distinguishes outcomes that `block_task` actually separates:
+/// - transport died before a JSON-RPC response (`never received`)
+/// - agent has no `session/resume` method ([`ErrorCode::MethodNotFound`])
+/// - request cancelled / auth required
+/// - malformed peer payload ([`ErrorCode::ParseError`])
+///
+/// Host-side timeouts never reach this helper; they are formatted with
+/// [`acp_timeout_err`]. A peer [`ErrorCode::InternalError`] that is *not* the
+/// transport wrap is treated as a rejection: the agent answered and refused.
+fn resume_error_is_transient(error: &agent_client_protocol::Error) -> bool {
+    use agent_client_protocol::ErrorCode;
+    match error.code {
+        ErrorCode::MethodNotFound
+        | ErrorCode::RequestCancelled
+        | ErrorCode::AuthRequired
+        | ErrorCode::ParseError => true,
+        ErrorCode::InternalError => {
+            let text = error.to_string();
+            text.contains("never received") || text.contains("timed out after")
+        }
+        _ => false,
+    }
+}
+
+/// Map a `session/resume` RPC/transport error to the string the UI classifies.
+///
+/// Permanent rejections use [`GTERO_RESUME_REJECTED_PREFIX`] as the Display
+/// (no `Internal error` wrap). Transient failures keep the historical
+/// `resume_session: {error}` wording from [`timed_acp_request`].
+fn classify_resume_session_error(
+    error: agent_client_protocol::Error,
+) -> agent_client_protocol::Error {
+    if resume_error_is_transient(&error) {
+        acp_err(format!("resume_session: {error}"))
+    } else {
+        let code = i32::from(error.code);
+        agent_client_protocol::Error::new(
+            code,
+            format!("{GTERO_RESUME_REJECTED_PREFIX}resume_session: {error}"),
+        )
+    }
+}
+
+/// Flatten an ACP error to the payload the frontend sees on `agent:failed`
+/// and on `AppError` for `run_once`.
+///
+/// Rejected resumes must start with [`GTERO_RESUME_REJECTED_PREFIX`]. If the
+/// prefix was stuffed into `Error.data` via [`acp_err`], unwrap it so Display
+/// wrapping (`Internal error: "…"`) cannot hide the token.
+fn frontend_acp_error_message(error: &agent_client_protocol::Error) -> String {
+    let displayed = error.to_string();
+    if displayed.starts_with(GTERO_RESUME_REJECTED_PREFIX) {
+        return displayed;
+    }
+    if let Some(serde_json::Value::String(detail)) = &error.data {
+        if detail.starts_with(GTERO_RESUME_REJECTED_PREFIX) {
+            return detail.clone();
+        }
+    }
+    displayed
 }
 
 fn cancelled_payload(
@@ -1539,16 +1615,27 @@ pub async fn run_once(
 
                 let (acp_session_id, mut config_options) = if let Some(ref rid) = resume_id {
                     if can_resume {
+                        // Do not funnel resume through `timed_acp_request`: that helper
+                        // flattens timeout and agent JSON-RPC errors into the same
+                        // `resume_session: …` string. Classify the raw `block_task`
+                        // error so only a permanent reject gets
+                        // `GTERO_RESUME_REJECTED_PREFIX` (see that constant).
                         let resp = tokio::select! {
-                            result = timed_acp_request(
-                                "session/resume",
+                            result = tokio::time::timeout(
+                                ACP_TIMEOUT,
                                 connection
                                     .send_request(ResumeSessionRequest::new(
                                         SessionId::new(rid.as_str()),
                                         cwd.clone(),
                                     ))
                                     .block_task(),
-                            ) => result?,
+                            ) => match result {
+                                Err(_elapsed) => return Err(acp_timeout_err("resume_session")),
+                                Ok(Ok(resp)) => resp,
+                                Ok(Err(error)) => {
+                                    return Err(classify_resume_session_error(error));
+                                }
+                            },
                             () = wait_for_cancellation(&mut cancellation) => {
                                 let payload = cancelled_payload(
                                     session_for_conn.clone(),
@@ -1569,9 +1656,11 @@ pub async fn run_once(
                         // resume_id is Some only when can_resume || can_load.
                         // Grok and similar: continue across process restarts via
                         // session/load (requires mcpServers; schema defaults to []).
+                        // Same classification as resume: only a permanent reject
+                        // gets GTERO_RESUME_REJECTED_PREFIX (Grok sticky path).
                         let resp = tokio::select! {
-                            result = timed_acp_request(
-                                "session/load",
+                            result = tokio::time::timeout(
+                                ACP_TIMEOUT,
                                 connection
                                     .send_request(
                                         LoadSessionRequest::new(
@@ -1581,7 +1670,13 @@ pub async fn run_once(
                                         .mcp_servers(vec![]),
                                     )
                                     .block_task(),
-                            ) => result?,
+                            ) => match result {
+                                Err(_elapsed) => return Err(acp_timeout_err("session/load")),
+                                Ok(Ok(resp)) => resp,
+                                Ok(Err(error)) => {
+                                    return Err(classify_resume_session_error(error));
+                                }
+                            },
                             () = wait_for_cancellation(&mut cancellation) => {
                                 let payload = cancelled_payload(
                                     session_for_conn.clone(),
@@ -1857,7 +1952,7 @@ pub async fn run_once(
     match run_result {
         Ok(payload) => Ok(payload),
         Err(e) => {
-            let msg = e.to_string();
+            let msg = frontend_acp_error_message(&e);
             let _ = app.emit(
                 "agent:failed",
                 AgentFailedEvent {
@@ -1865,7 +1960,13 @@ pub async fn run_once(
                     error: msg.clone(),
                 },
             );
-            Err(AppError::Acp(msg))
+            // Prefixed resumes must Display-start with the token; `AppError::Acp`
+            // would prepend `acp: ` and hide it from the frontend classifier.
+            if msg.starts_with(GTERO_RESUME_REJECTED_PREFIX) {
+                Err(AppError::message(msg))
+            } else {
+                Err(AppError::Acp(msg))
+            }
         }
     }
 }
@@ -2957,5 +3058,129 @@ mod replay_builder_tests {
         assert_eq!(lines.len(), 1);
         assert!(lines[0].text.is_empty());
         assert_eq!(lines[0].parts.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod gtero_resume_error_tests {
+    use super::{
+        acp_err, acp_timeout_err, classify_resume_session_error, frontend_acp_error_message,
+        GTERO_RESUME_REJECTED_PREFIX,
+    };
+    use agent_client_protocol::{util, Error};
+
+    fn assert_rejected(error: Error) {
+        let classified = classify_resume_session_error(error);
+        let msg = frontend_acp_error_message(&classified);
+        assert!(
+            msg.starts_with(GTERO_RESUME_REJECTED_PREFIX),
+            "expected prefix on {msg:?}"
+        );
+        assert_eq!(
+            classified.to_string(),
+            msg,
+            "rejected Display must be the frontend string (no Internal-error wrap)"
+        );
+        assert!(
+            msg.contains("resume_session:"),
+            "detail should keep the resume_session: wording, got {msg:?}"
+        );
+    }
+
+    fn assert_not_rejected(error: Error) {
+        let classified = classify_resume_session_error(error);
+        let msg = frontend_acp_error_message(&classified);
+        assert!(
+            !msg.starts_with(GTERO_RESUME_REJECTED_PREFIX),
+            "must not prefix transient {msg:?}"
+        );
+        assert!(
+            msg.contains("resume_session"),
+            "transient wording should stay historical, got {msg:?}"
+        );
+    }
+
+    #[test]
+    fn prefix_is_the_agreed_token_with_trailing_space() {
+        assert_eq!(GTERO_RESUME_REJECTED_PREFIX, "gtero_resume_rejected: ");
+    }
+
+    #[test]
+    fn invalid_params_is_a_permanent_reject() {
+        assert_rejected(Error::invalid_params().data("unknown session"));
+    }
+
+    #[test]
+    fn resource_not_found_is_a_permanent_reject() {
+        assert_rejected(Error::resource_not_found(None));
+    }
+
+    #[test]
+    fn invalid_request_is_a_permanent_reject() {
+        assert_rejected(Error::invalid_request());
+    }
+
+    #[test]
+    fn custom_session_identifier_code_is_a_permanent_reject() {
+        assert_rejected(Error::new(-32001, "INVALID_SESSION_IDENTIFIER"));
+    }
+
+    #[test]
+    fn peer_internal_error_is_a_permanent_reject() {
+        // The agent answered. Transport loss uses a distinct "never received" wrap.
+        assert_rejected(Error::internal_error().data("session store unavailable"));
+    }
+
+    #[test]
+    fn method_not_found_is_not_a_reject() {
+        // Missing session/resume: id is unusable with *this* agent, but forgetting
+        // the vault pointer because the user switched to a weaker agent is destructive.
+        assert_not_rejected(Error::method_not_found());
+    }
+
+    #[test]
+    fn request_cancelled_is_not_a_reject() {
+        assert_not_rejected(Error::request_cancelled());
+    }
+
+    #[test]
+    fn auth_required_is_not_a_reject() {
+        assert_not_rejected(Error::auth_required());
+    }
+
+    #[test]
+    fn parse_error_is_not_a_reject() {
+        assert_not_rejected(Error::parse_error());
+    }
+
+    #[test]
+    fn transport_never_received_is_not_a_reject() {
+        assert_not_rejected(util::internal_error(
+            "response to `session/resume` never received: connection closed",
+        ));
+    }
+
+    #[test]
+    fn host_timeout_wording_is_unchanged_and_unprefixed() {
+        let err = acp_timeout_err("resume_session");
+        let msg = frontend_acp_error_message(&err);
+        assert!(!msg.starts_with(GTERO_RESUME_REJECTED_PREFIX));
+        assert!(
+            msg.contains("resume_session timed out after 15s"),
+            "timeout wording must stay historical, got {msg:?}"
+        );
+    }
+
+    #[test]
+    fn unwraps_prefix_hidden_inside_internal_error_data() {
+        let wrapped = acp_err(format!(
+            "{GTERO_RESUME_REJECTED_PREFIX}resume_session: unknown session"
+        ));
+        let msg = frontend_acp_error_message(&wrapped);
+        assert!(
+            msg.starts_with(GTERO_RESUME_REJECTED_PREFIX),
+            "agent:failed must start with the token, got {msg:?}"
+        );
+        assert!(!msg.starts_with("Internal error"));
     }
 }

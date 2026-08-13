@@ -42,12 +42,24 @@ import {
 	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
-import { notifyError } from "@/lib/core/notify";
+import { buildExplainPrompt } from "@/lib/agent/gtero-prompts";
+import {
+	clearGteroRunAttempt,
+	runOnceGtero,
+} from "@/lib/agent/gtero-run";
+import {
+	appendNotesSection,
+	formatSelectionNoteBody,
+} from "@/lib/agent/notes-patch";
+import { rememberGteroSession } from "@/lib/agent/vault-session";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { gteroUserFacingError } from "@/lib/pdf/ask";
 import type { PdfAskAnchor } from "@/lib/pdf/ask/types";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
 import {
 	createTranslateRecord,
 	deletePdfTranslate,
+	finishedInsightForSelection,
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
 import {
@@ -63,6 +75,8 @@ import {
 	resolveTranslateAgent,
 	runTranslate,
 } from "@/lib/translate";
+import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
+import { applyDiskChange } from "@/lib/workspace/actions";
 
 export type UsePdfSelectionTranslateOptions = {
 	/** Sidecar root for `marks/<id>.json` (null for loose PDFs — nothing persists). */
@@ -103,6 +117,10 @@ export type PdfSelectionTranslate = {
 	translateError: string | null;
 	/** Selection-menu action: create the record and start the run. */
 	translateSelection: (anchor: PdfAskAnchor) => void;
+	/** Selection-menu action: sticky Gtero explain card (mode=explain). */
+	explainSelection: (anchor: PdfAskAnchor) => void;
+	/** Selection-menu action: append quote + page + insight to NOTES.md. */
+	writeSelectionNotes: (anchor: PdfAskAnchor) => void;
 	/** Cancel the in-flight run; also wired into {@link usePdfCards}. */
 	stopTranslateSession: () => void;
 	/** Card header delete: drop the record from state + disk and close the card. */
@@ -414,6 +432,210 @@ export function usePdfSelectionTranslate({
 		],
 	);
 
+	const explainSelection = useCallback(
+		(anchor: PdfAskAnchor) => {
+			const quote = anchor.quote?.trim();
+			if (!quote) return;
+			stopTranslateSession();
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			const rec = createTranslateRecord({
+				paperPath,
+				page: anchor.page,
+				rects: anchor.rects,
+				quote,
+				mode: "explain",
+			});
+			upsertTranslate(rec);
+			cardHoverSurfaceRef.current = false;
+			openCard({ kind: "translate", id: rec.id });
+			translateStreamingRef.current = true;
+			setTranslateStreaming(true);
+			setTranslateError(null);
+
+			const prompt = buildExplainPrompt({
+				text: quote,
+				paperRel: paperRelPath,
+				page: anchor.page,
+			});
+			void (async () => {
+				try {
+					const registry = await listAgents().catch(() => null);
+					const pdfAsk = resolveTranslateAgent(
+						loadSettings().pdfAsk,
+						registry,
+					);
+					const translate = resolveTranslateAgent(
+						loadSettings().translate,
+						registry,
+					);
+					const resolved = pdfAsk.agentId ? pdfAsk : translate;
+					if (!resolved.agentId) {
+						const msg = t("selection.explainNoAgent");
+						notifyError(msg);
+						markTranslateFailure(rec.id, msg);
+						return;
+					}
+					const accepted = await runOnceGtero({
+						prompt,
+						agentId: resolved.agentId,
+						modelId: resolved.modelId,
+						vaultPath: vaultPath ?? undefined,
+						workflow: "free",
+						autoApprove: true,
+						hideFromChatHistory: true,
+					});
+					if (translateDisposedRef.current) {
+						void cancelAgentRun(accepted.sessionId).catch(() => undefined);
+						return;
+					}
+					const sessionId = accepted.sessionId;
+					translateSessionRef.current = sessionId;
+					activeSessionRef.current = sessionId;
+					const unsubs: UnlistenFn[] = [];
+					translateUnsubsRef.current = unsubs;
+					const cleanup = () => {
+						for (const u of unsubs) u();
+						if (translateUnsubsRef.current === unsubs)
+							translateUnsubsRef.current = null;
+						if (translateSessionRef.current === sessionId)
+							translateSessionRef.current = null;
+						if (activeSessionRef.current === sessionId)
+							activeSessionRef.current = null;
+						translateStreamingRef.current = false;
+						setTranslateStreaming(false);
+					};
+					unsubs.push(
+						await listenAgentStream((ev) => {
+							if (ev.sessionId !== sessionId) return;
+							if ((ev.kind ?? "message") === "thought") return;
+							const latest =
+								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+							upsertTranslate({
+								...latest,
+								result: (latest.result ?? "") + ev.chunk,
+								updatedAt: new Date().toISOString(),
+								error: undefined,
+							});
+						}),
+					);
+					unsubs.push(
+						await listenAgentCompleted((ev) => {
+							if (ev.sessionId !== sessionId) return;
+							if (ev.providerSessionId && vaultPath) {
+								void rememberGteroSession(vaultPath, ev.providerSessionId);
+							}
+							clearGteroRunAttempt(sessionId);
+							const latest =
+								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+							const next = {
+								...latest,
+								result: (ev.content || latest.result || "").trim(),
+								updatedAt: new Date().toISOString(),
+								error: undefined,
+							};
+							upsertTranslate(next);
+							void persistTranslate(next);
+							setTranslateError(null);
+							cleanup();
+						}),
+					);
+					unsubs.push(
+						await listenAgentFailed((ev) => {
+							if (ev.sessionId !== sessionId) return;
+							void gteroUserFacingError(
+								ev.error,
+								{
+									sessionLost: t("selection.sessionLost"),
+									sessionRetry: t("selection.sessionRetry"),
+									fallback: t("pdfAsk.agentFailed"),
+								},
+								{ localSessionId: sessionId },
+							).then((msg) => {
+								notifyError(msg);
+								markTranslateFailure(rec.id, msg);
+								cleanup();
+							});
+						}),
+					);
+					if (translateDisposedRef.current) {
+						cleanup();
+					}
+				} catch (e) {
+					const message = await gteroUserFacingError(e, {
+						sessionLost: t("selection.sessionLost"),
+						sessionRetry: t("selection.sessionRetry"),
+						fallback: t("pdfAsk.agentFailed"),
+					});
+					notifyError(message);
+					markTranslateFailure(rec.id, message);
+				}
+			})();
+		},
+		[
+			t,
+			vaultPath,
+			paperAbsPath,
+			paperRelPath,
+			stopTranslateSession,
+			upsertTranslate,
+			persistTranslate,
+			markTranslateFailure,
+			openCard,
+			cardHoverSurfaceRef,
+			translatesRef,
+			activeSessionRef,
+			translateStreamingRef,
+		],
+	);
+
+	const writeSelectionNotes = useCallback(
+		(anchor: PdfAskAnchor) => {
+			const quote = anchor.quote?.trim();
+			if (!quote) return;
+			if (!paperAbsPath) {
+				notifyError(t("selection.notesNoPaper"));
+				return;
+			}
+			const notesPath = joinVaultPath(paperAbsPath, "NOTES.md");
+			const streamingId =
+				translateStreaming && activeCardRef.current?.kind === "translate"
+					? activeCardRef.current.id
+					: undefined;
+			const insight = finishedInsightForSelection(translatesRef.current, {
+				quote,
+				page: anchor.page,
+				excludeIds: streamingId ? [streamingId] : undefined,
+			});
+			void (async () => {
+				try {
+					let existing = "";
+					try {
+						existing = await readVaultFile(notesPath);
+					} catch {
+						existing = "";
+					}
+					const body = formatSelectionNoteBody({
+						quote,
+						page: anchor.page,
+						insight,
+					});
+					await writeVaultFile(notesPath, appendNotesSection(existing, body));
+					await applyDiskChange(notesPath);
+					notifySuccess(t("selection.notesAppended"));
+				} catch {
+					notifyError(t("selection.notesFailed"));
+				}
+			})();
+		},
+		[
+			paperAbsPath,
+			translateStreaming,
+			t,
+			translatesRef,
+			activeCardRef,
+		],
+	);
+
 	const deleteTranslateCard = useCallback(() => {
 		const id =
 			activeCardRef.current?.kind === "translate"
@@ -437,6 +659,8 @@ export function usePdfSelectionTranslate({
 		translateStreaming,
 		translateError,
 		translateSelection,
+		explainSelection,
+		writeSelectionNotes,
 		stopTranslateSession,
 		deleteTranslateCard,
 		openTranslateSettings,

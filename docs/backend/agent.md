@@ -130,9 +130,25 @@ ACP **没有**统一的 ask-user tool 规范：各 harness 的字段名、挂载
 
 ## 工作流与 Skill
 
-- workflow：`summary` / `qa` / `related_work` 等（面板 chips 映射）。
+- workflow：`summary` / `qa` / `related_work` / `corpus_synthesis` / `paper_reader`（面板 chips 或 Zap 映射）。
 - Skill：Claude 倾向 `/id`；其它注入 `SKILL.md` 文本（`SkillMentionStyle`）。
-- paper-reader：写 NOTES + `paper_set_is_read`；前端任务条编排。
+- paper-reader：写 NOTES + `paper_set_is_read`；已有实质笔记则追加 `## Gtero · YYYY-MM-DD`；前端任务条编排。
+- `agent_run_once` 传入 `sessionId` 时 `session/resume`。Gtero 用 `{vault}/.agentero/grok-workspace.json` 记住每库主会话（前端读写）。见 [../frontend/gtero.md](../frontend/gtero.md)。
+
+### Gtero `session/resume` 失败契约
+
+前端只在错误字符串 **以 `gtero_resume_rejected: ` 开头**（含尾随空格）时丢掉 vault sticky session id。Host 在 `run_once` 里区分结果，并保证 **`agent:failed.error` 与该次 `AppError` Display** 用同一串：
+
+| 结果 | 如何区分 | 前端看到的字符串 |
+|---|---|---|
+| Agent JSON-RPC 拒绝该 id（`invalid_params` / `resource_not_found` / `invalid_request` / 自定义 code / 非传输的 peer `internal_error`） | `block_task` 返回 peer 的 `Error` | **以 `gtero_resume_rejected: ` 开头**，后接历史可读细节 `resume_session: …` |
+| Host 15s 超时 | `tokio::time::timeout`，Host 自造错误 | `Internal error: "resume_session timed out after 15s"`（**无**前缀） |
+| 传输中断（对端无 JSON-RPC 应答） | ACP `response to \`session/resume\` never received` | 历史 `resume_session: …` 包装（**无**前缀） |
+| 用户取消 | `select` 走 `agent:completed` | 不算失败 |
+| Agent 取消 / 需要登录 | `request_cancelled` / `auth_required` | 历史 `resume_session: …`（**无**前缀） |
+| 本 Agent 无 `session/resume`（`method_not_found`） | JSON-RPC `-32601` | **无**前缀。id 对当前较弱 Agent 不可用，但丢掉 vault 指针会在用户切回 Grok 后毁掉整条线程 |
+
+Host **不**在 `initialize` 能力位缺失时改写错误形状：未广告 `session/resume` 时仍发送 RPC，缺方法则落到 `method_not_found` 桶。常量 `GTERO_RESUME_REJECTED_PREFIX` 定义在 `src-tauri/src/features/agent/acp.rs`。
 - 输出约定：工作流要求 `## Sources`（相对 Vault 路径）；双链保留 `[[...]]`。
 - `AGENTS.md` 已作为 progressive disclosure 系统上下文注入所有工作流 prompt（优先级：Vault 根 `AGENTS.md` → 当前 paper `NOTES.md` → marks）。
 - 自由模型选择：`preferred_model_id` 可指向 ACP catalog 外的任意模型 id；Warm / Run 时始终尝试 `session/set_config_option`，失败不阻断会话。

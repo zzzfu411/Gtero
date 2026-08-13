@@ -8,7 +8,8 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 
 - **论文库**：Catalog SQLite 管理论文集合，支持表头排序/选列/标签筛选、BibTeX 导出
 - **魔棒入库**：通过 URL/arXiv ID/DOI 一键导入论文，自动下载 PDF、解压 LaTeX 源码
-- **PDF 阅读与标注**：分屏阅读（左 PDF/右笔记），划词高亮/批注/翻译/提问，大纲与页码导航
+- **PDF 阅读与标注**：分屏阅读（左 PDF/右笔记），划词高亮/批注/翻译/解释/提问，大纲与页码导航
+- **Gtero**：每 Vault 一条 Grok sticky 会话，论文精读/划词解释/NOTES 追加/库综合走同一线程
 - **Agent 工作流**：BYOA 接入本机 ACP Agent，支持论文总结/问答/精读，选区上下文与 @ 提及
 - **Markdown 编辑**：Plate 编辑器，双链 `[[...]]`、Obsidian Callout、嵌套标题引用、内嵌图片管理
 - **Zotero Connector**：兼容官方浏览器扩展，一键保存文献到当前 Vault
@@ -72,7 +73,7 @@ cargo test -p agentero-cli
 | 分类 | 内容 | 路径 |
 |---|---|---|
 | **架构** | 整体架构、工作台布局、核心工作流、数据流 | [docs/architecture.md](docs/architecture.md) |
-| **前端** | 壳、工作区、文件树、论文库、入库、Markdown、PDF、Agent、双链、翻译、设置 | [docs/frontend/](docs/frontend/index.md) |
+| **前端** | 壳、工作区、文件树、论文库、入库、Markdown、PDF、Agent、Gtero、双链、翻译、设置 | [docs/frontend/](docs/frontend/index.md) |
 | **后端** | 数据模型、Catalog、Vault、入库、Connector、Wiki、Agent、远程、搜索、日志、CLI、API | [docs/backend/](docs/backend/index.md) |
 | **教程** | 快速上手、导入论文、阅读整理、接入 Agent、Zotero | [docs/usage/](docs/usage/index.md) |
 | **开发** | 路线图、TODO、设计记录 | [docs/development/](docs/development/index.md) |

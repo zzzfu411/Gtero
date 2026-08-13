@@ -70,6 +70,7 @@ src-tauri/src/
 | 层 | 存什么 | 位置 |
 |---|---|---|
 | 文件 | NOTES、PDF、TeX、marks、assets | Vault 内 |
+| Gtero 会话 | 每库 ACP session id | `{vault}/.agentero/grok-workspace.json` |
 | Catalog SQLite | 论文集合 + metadata | `.agentero/catalog.sqlite` |
 | 应用设置 | UI / Agent 注册表 / 偏好 | XDG `~/.config/agentero/` |
 | 版面 ONNX | PP-DocLayoutV3（ModelScope → HF） | XDG cache `~/.cache/agentero/models/` |

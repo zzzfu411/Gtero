@@ -47,6 +47,12 @@ export type AgentPanelRefs = {
 	promptHistoryIndexRef: RefObject<number | null>;
 	promptHistoryDraftRef: RefObject<string>;
 	promptHistoryAppliedRef: RefObject<string | null>;
+	/** Next send uses session/new and records a Gtero fork. */
+	forkPendingRef: RefObject<boolean>;
+	/** Local run ids whose completed provider session should be recorded as a fork. */
+	pendingForkSessionIdsRef: RefObject<Set<string>>;
+	/** Last injected Gtero paper-focus block (skip unchanged repeats). */
+	lastFocusBlockRef: RefObject<string>;
 };
 
 export type AgentPanelContext = {
@@ -158,6 +164,9 @@ export function useAgentPanelContext({
 	const promptHistoryIndexRef = useRef<number | null>(null);
 	const promptHistoryDraftRef = useRef("");
 	const promptHistoryAppliedRef = useRef<string | null>(null);
+	const forkPendingRef = useRef(false);
+	const pendingForkSessionIdsRef = useRef(new Set<string>());
+	const lastFocusBlockRef = useRef("");
 
 	const refs: AgentPanelRefs = {
 		activeConversationRef,
@@ -180,6 +189,9 @@ export function useAgentPanelContext({
 		promptHistoryIndexRef,
 		promptHistoryDraftRef,
 		promptHistoryAppliedRef,
+		forkPendingRef,
+		pendingForkSessionIdsRef,
+		lastFocusBlockRef,
 	};
 
 	const resetSessionContext = useCallback(() => {
@@ -191,6 +203,9 @@ export function useAgentPanelContext({
 		pendingSubmissionSessionIdRef.current = null;
 		knownSessionIdsRef.current.clear();
 		thinkParsersRef.current.clear();
+		forkPendingRef.current = false;
+		pendingForkSessionIdsRef.current.clear();
+		lastFocusBlockRef.current = "";
 	}, []);
 
 	return {
