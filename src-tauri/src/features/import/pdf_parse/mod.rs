@@ -606,6 +606,13 @@ async fn run_liteparse_markdown(
     ))
 }
 
+#[cfg(not(any(unix, target_os = "ios")))]
+async fn run_liteparse_markdown(_pdf_path: &Path) -> Result<(String, String, String), AppError> {
+    Err(AppError::message(
+        "PDF body parsing via liteparse is not available on this platform",
+    ))
+}
+
 fn update_catalog_body(
     vault: &Path,
     path_rel: &str,

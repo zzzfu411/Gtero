@@ -1,6 +1,18 @@
 <p align="center">
-  <img src="docs/assets/hero.png" alt="Agentero" width="100%" />
+  <img src="docs/assets/hero.png" alt="Gtero" width="100%" />
 </p>
+
+<h1 align="center">Gtero</h1>
+
+<p align="center"><strong>Grok-first 论文阅读工作台</strong> · 基于 Agentero 的二次开发，不是官方 Agentero。</p>
+
+官方原版请用 [poco-ai/Agentero](https://github.com/poco-ai/Agentero)（本机目录 <code>D:\AppStore\Agentero</code>）。
+
+Gtero 在 Agentero 之上默认把每个 Vault 绑到<strong>一条</strong> Grok Build 会话（<code>.agentero/grok-workspace.json</code>）：划词翻译/解释、精读、笔记追加、综析都 <code>resume</code> 同一条记录；只有用户确认「新开话题」才会 fork。
+
+---
+
+<p align="center">上游项目：Agentero</p>
 
 <p align="center">
   <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://img.shields.io/github/stars/poco-ai/agentero?style=flat&logo=github" alt="GitHub stars" /></a>
