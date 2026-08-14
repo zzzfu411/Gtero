@@ -15,7 +15,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 ## 面板行为
 
 - 空态建议 chips → workflow：`summary` / `qa` / `related_work` / `corpus_synthesis`。
-- **Gtero**：默认每 Vault 一条 sticky Grok 会话（`.agentero/grok-workspace.json`）。「+」弹出 Dialog 确认后分叉，不替换主线程；恢复失败忘掉该 id 并提示，不静默 `session/new`。详见 [gtero.md](gtero.md)。
+- **Gtero**：默认每 Vault 一条 sticky Grok 会话（`.agentero/grok-workspace.json`）。「+」弹出 Dialog 确认后分叉，不替换主线程。仅**永久拒绝**（`gtero_resume_rejected:` / unknown session）忘掉该 id；超时/传输等保留指针并提示重试，不静默 `session/new`。详见 [gtero.md](gtero.md)。
 - **当前论文默认 context**（可 X 移除）；`@` 提及或文件树拖入 → context chip。
 - **选区上下文**（Cursor 式）：Markdown / PDF 中选中文字 → composer 出现瞬时选区 chip（虚线，实时跟随最新选区；取消选区即消失）；`⌘L` 或 PDF 划词菜单「加入对话」将其**固定**（实底，最多 4 个）并打开 Agent 面板；无选区时 `⌘L` 仍是开关侧栏。发送时选区以 `Selected text from {path} (page N):` + `> 引用` 追加进 prompt，随该轮消费清空；不落 localStorage，超长截断 4000 字符。Store：`src/lib/agent/selection-store.ts`。
 - **PDF 选区 → 对话卡片**：来自 PDF 且带页内几何（`rects` + `paperAbsPath`）的选区，在 **Agent 发送该轮** 时写入 `kind: ask` 对话线程（`anchor.quote` = 选中原文，`messages[]` = 用户问题 + Agent 回复）。页边针与浮层为**提问对话卡**（MessageSquare），**不是**视觉批注 `agent-trace`。Markdown 选区或缺少几何时仍只作 chip、不落盘。
@@ -65,9 +65,10 @@ Tool 提升的作答：`formatAskUserAnswers` 后作为下一用户轮。若当�
 | 触发 | 条件 |
 |---|---|
 | Zap | 有 PDF +（TeX 或 `PAPER.md`）且未读 |
-| 自动 | `autoPaperReader`（默认关）；魔棒/单篇 Download 后 |
+| 自动 | `autoPaperReader`（默认关）；魔棒单条 / 本地 PDF 单篇 / 单篇 Download 后 |
 
 成功写 `NOTES.md`（已有实质笔记则追加 `## Gtero · YYYY-MM-DD`，不整文件替换），`is_read = true`；进度在后台任务条。批量导入不连跑。  
+`agent_run_once` 是 fire-and-forget：精读先 `subscribeAgentRun` 订阅并缓冲 `agent:completed|failed`，再 `runOnceGtero`；`wait` 30 分钟超时，避免漏掉快速失败导致 `inflightReads` 永不清理。  
 Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md`）。  
 用户提示会按当前 App 语言（设置里的 `en` / `zh-CN` / 跟随系统解析后）注入一句输出语言说明：正文跟 App 语言，skill 固定的英文 `##` 结构标题保持不变。
 
@@ -85,6 +86,6 @@ Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md
 ## 代码
 
 - UI：`src/components/agent/`（`agent-panel.tsx` / `agent-composer.tsx` 外壳、`hooks/` 面板与 composer 状态、`composer/` 输入区子件：附件 / 队列 / context chip / @ 与 $ 与 / 菜单 / 模型选择 / 工具条；含 `gtero-fork-dialog.tsx`）
-- 状态：`src/lib/agent/`（chat-state、composer-state、stream-parse、mention、vault-session、gtero-run）
-- 精读编排：`src/lib/paper/reader.ts`
+- 状态：`src/lib/agent/`（chat-state、composer-state、stream-parse、mention、vault-session、gtero-run、run-wait）
+- 精读编排：`src/lib/paper/reader.ts`；入库后置：`src/lib/paper/after-import.ts`
 - Gtero：[gtero.md](gtero.md)

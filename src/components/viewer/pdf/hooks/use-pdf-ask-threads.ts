@@ -4,11 +4,11 @@
  * from its gutter pin or from the annotations panel.
  *
  * Its own hook because a turn is a small state machine that nothing else shares:
- * optimistic user message → `runOnceGtero` → three ACP listeners (stream / completed /
- * failed) that append into the *thread array* rather than into local state, with
- * one cleanup closure per turn. Persisting on every terminal event is what makes
- * an interrupted app run recoverable, so those write points are part of the
- * machine, not of the caller.
+ * optimistic user message → subscribe `agent:*` → `runOnceGtero` → wait
+ * (stream / completed / failed) that append into the *thread array* rather than
+ * into local state, with one cleanup closure per turn. Persisting on every
+ * terminal event is what makes an interrupted app run recoverable, so those
+ * write points are part of the machine, not of the caller.
  *
  * Boundaries:
  * - the thread array lives in {@link usePdfMarksIo}: setters and the mirror ref
@@ -36,19 +36,19 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { CardScreenPoint } from "@/components/viewer/pdf/types";
-import {
-	cancelAgentRun,
-	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	listenAgentStream,
-	type PromptImage,
-} from "@/lib/agent";
+import { cancelAgentRun, listAgents, type PromptImage } from "@/lib/agent";
 import {
 	clearGteroRunAttempt,
 	runOnceGtero,
 	selectStickySessionId,
 } from "@/lib/agent/gtero-run";
+import {
+	AgentRunDisposedError,
+	AgentRunTimeoutError,
+	DEFAULT_AGENT_RUN_TIMEOUT_MS,
+	isAgentRunAbortError,
+	subscribeAgentRun,
+} from "@/lib/agent/run-wait";
 import {
 	isGteroSticky,
 	loadGteroBinder,
@@ -263,6 +263,39 @@ export function usePdfAskThreads({
 			const prompt = buildPdfAskPrompt(withUser, question, {
 				includeHistory,
 			});
+			const prevUnsubs = runUnsubsRef.current;
+			runUnsubsRef.current = null;
+			if (prevUnsubs) for (const u of prevUnsubs) u();
+			const waiter = await subscribeAgentRun({
+				timeoutMs: DEFAULT_AGENT_RUN_TIMEOUT_MS,
+				timeoutError: t("pdfAsk.agentTimeout"),
+				onStream: (ev) => {
+					if ((ev.kind ?? "message") === "thought") return;
+					setThreads((prev) =>
+						prev.map((th) => {
+							if (th.id !== threadId) return th;
+							const msgs = [...th.messages];
+							const last = msgs[msgs.length - 1];
+							if (last?.id !== assistantId) return th;
+							msgs[msgs.length - 1] = {
+								...last,
+								content: last.content + ev.chunk,
+							};
+							return { ...th, messages: msgs };
+						}),
+					);
+				},
+			});
+			const unsubs: UnlistenFn[] = [() => waiter.dispose()];
+			runUnsubsRef.current = unsubs;
+			let sessionId: string | undefined;
+			const cleanup = () => {
+				waiter.dispose();
+				if (runUnsubsRef.current === unsubs) runUnsubsRef.current = null;
+				if (sessionId && activeSessionRef.current === sessionId)
+					activeSessionRef.current = null;
+				setStreaming(false);
+			};
 			try {
 				const accepted = await runOnceGtero({
 					prompt,
@@ -275,10 +308,11 @@ export function usePdfAskThreads({
 					hideFromChatHistory: true,
 				});
 				if (runDisposedRef.current) {
-					// Viewer unmounted while the run was being accepted: drop it.
 					void cancelAgentRun(accepted.sessionId).catch(() => undefined);
+					cleanup();
 					return;
 				}
+				sessionId = accepted.sessionId;
 				activeSessionRef.current = accepted.sessionId;
 				const withAssistant: PdfAskThread = {
 					...withUser,
@@ -294,107 +328,69 @@ export function usePdfAskThreads({
 					],
 				};
 				upsertThread(withAssistant);
-				const sessionId = accepted.sessionId;
-				const unsubs: UnlistenFn[] = [];
-				runUnsubsRef.current = unsubs;
-				const cleanup = () => {
-					for (const u of unsubs) u();
-					if (runUnsubsRef.current === unsubs) runUnsubsRef.current = null;
-					if (activeSessionRef.current === sessionId)
-						activeSessionRef.current = null;
-					setStreaming(false);
-				};
-				unsubs.push(
-					await listenAgentStream((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						if ((ev.kind ?? "message") === "thought") return;
-						setThreads((prev) =>
-							prev.map((th) => {
-								if (th.id !== threadId) return th;
-								const msgs = [...th.messages];
-								const last = msgs[msgs.length - 1];
-								if (last?.id !== assistantId) return th;
-								msgs[msgs.length - 1] = {
-									...last,
-									content: last.content + ev.chunk,
-								};
-								return { ...th, messages: msgs };
-							}),
-						);
-					}),
-				);
-				unsubs.push(
-					await listenAgentCompleted((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						if (ev.providerSessionId && vaultPath) {
-							void rememberGteroSession(vaultPath, ev.providerSessionId);
+				const ev = await waiter.wait(accepted.sessionId);
+				if (ev.providerSessionId && vaultPath) {
+					void rememberGteroSession(vaultPath, ev.providerSessionId);
+				}
+				clearGteroRunAttempt(sessionId);
+				setThreads((prev) =>
+					prev.map((th) => {
+						if (th.id !== threadId) return th;
+						const msgs = [...th.messages];
+						const last = msgs[msgs.length - 1];
+						if (last?.id === assistantId) {
+							msgs[msgs.length - 1] = {
+								...last,
+								content: ev.content || last.content,
+								sources: (ev.sources ?? []).map((uri) => ({ uri })),
+							};
 						}
-						clearGteroRunAttempt(sessionId);
-						setThreads((prev) =>
-							prev.map((th) => {
-								if (th.id !== threadId) return th;
-								const msgs = [...th.messages];
-								const last = msgs[msgs.length - 1];
-								if (last?.id === assistantId) {
-									msgs[msgs.length - 1] = {
-										...last,
-										content: ev.content || last.content,
-										sources: (ev.sources ?? []).map((uri) => ({ uri })),
-									};
-								}
-								const done: PdfAskThread = {
-									...th,
-									messages: msgs,
-									updatedAt: new Date().toISOString(),
-								};
-								void persist(done);
-								return done;
-							}),
-						);
-						cleanup();
+						const done: PdfAskThread = {
+							...th,
+							messages: msgs,
+							updatedAt: new Date().toISOString(),
+						};
+						void persist(done);
+						return done;
 					}),
 				);
-				unsubs.push(
-					await listenAgentFailed((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						void gteroUserFacingError(
-							ev.error,
-							{
-								sessionLost: t("pdfAsk.sessionLost"),
-								sessionRetry: t("pdfAsk.sessionRetry"),
-								fallback: t("pdfAsk.agentFailed"),
-							},
-							{ localSessionId: sessionId },
-						).then((message) => {
-							notifyError(message);
-							setAskError(message);
-							setThreads((prev) =>
-								prev.map((th) => {
-									if (th.id !== threadId) return th;
-									const msgs = th.messages.filter((m) => m.id !== assistantId);
-									const done = { ...th, messages: msgs };
-									void persist(done);
-									return done;
-								}),
-							);
-							cleanup();
-						});
-					}),
-				);
-				if (runDisposedRef.current) {
-					// Viewer unmounted while the listeners were being attached.
+				cleanup();
+			} catch (e) {
+				if (sessionId) {
+					void cancelAgentRun(sessionId).catch(() => undefined);
+				}
+				if (
+					runDisposedRef.current ||
+					e instanceof AgentRunDisposedError ||
+					isAgentRunAbortError(e)
+				) {
 					cleanup();
 					return;
 				}
-			} catch (e) {
-				setStreaming(false);
-				const message = await gteroUserFacingError(e, {
-					sessionLost: t("pdfAsk.sessionLost"),
-					sessionRetry: t("pdfAsk.sessionRetry"),
-					fallback: t("pdfAsk.agentFailed"),
-				});
+				const message =
+					e instanceof AgentRunTimeoutError
+						? e.message
+						: await gteroUserFacingError(
+								e,
+								{
+									sessionLost: t("pdfAsk.sessionLost"),
+									sessionRetry: t("pdfAsk.sessionRetry"),
+									fallback: t("pdfAsk.agentFailed"),
+								},
+								sessionId ? { localSessionId: sessionId } : undefined,
+							);
 				notifyError(message);
 				setAskError(message);
+				setThreads((prev) =>
+					prev.map((th) => {
+						if (th.id !== threadId) return th;
+						const msgs = th.messages.filter((m) => m.id !== assistantId);
+						const done = { ...th, messages: msgs };
+						void persist(done);
+						return done;
+					}),
+				);
+				cleanup();
 			}
 		},
 		[upsertThread, persist, vaultPath, t, setThreads, activeSessionRef],
@@ -535,10 +531,14 @@ export function usePdfAskThreads({
 	}, [paperAbsPath, dismissAskChrome, activeCardRef, setThreads]);
 
 	const stopAskStreaming = useCallback(() => {
+		const unsubs = runUnsubsRef.current;
+		runUnsubsRef.current = null;
+		if (unsubs) for (const u of unsubs) u();
 		const sid = activeSessionRef.current;
-		if (!sid) return;
-		void cancelAgentRun(sid).catch(() => undefined);
-		activeSessionRef.current = null;
+		if (sid) {
+			void cancelAgentRun(sid).catch(() => undefined);
+			activeSessionRef.current = null;
+		}
 		setStreaming(false);
 	}, [activeSessionRef]);
 

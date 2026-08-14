@@ -28,7 +28,7 @@ Host 已支持 `session/resume`（`runOnce({ sessionId })`）。Gtero 只是在�
 | 瞬时失败 (`transient`) | 15s 超时、传输 `never received`、`method_not_found`、`request_cancelled`、`auth_required`、`parse_error` 等（Host **不加**前缀） | **保留** sticky id，下次仍 resume 同一线程 | `messages.sessionRetry` / `pdfAsk.sessionRetry` / `selection.sessionRetry` |
 | 其它 | 与 resume 无关的错误 | 不动 | 剥前缀后的原文或通用失败文案 |
 
-`agent_run_once` 是 fire-and-forget：真正的拒绝通常走 `agent:failed`，而不是 `runOnce()` 的 Promise reject。`runOnceGtero` 把填入的 provider session id 记在本地 run id 上；`handleGteroResumeFailure` 是唯一会分类 + 按需 forget + 返回展示文案的入口。
+`agent_run_once` 是 fire-and-forget：真正的拒绝通常走 `agent:failed`，而不是 `runOnce()` 的 Promise reject。精读 / PDF 快车道用 `subscribeAgentRun` **先**订阅并缓冲终端事件，再 `runOnce`；`wait` 超时（PDF 10 分钟、精读 30 分钟），避免漏事件后永久挂起。`runOnceGtero` 把填入的 provider session id 记在本地 run id 上；`handleGteroResumeFailure` 是唯一会分类 + 按需 forget + 返回展示文案的入口。
 
 `rememberGteroSession` 与 resume 使用同一条件（`gtero.enabled && gtero.sticky`）。Gtero 开着但粘性关闭时成功的 turn **不会**改 binder。
 
@@ -69,13 +69,18 @@ PDF 提问在 sticky resume 时**不再**把卡片历史塞进 prompt（已在�
 |---|---|
 | `src/lib/agent/vault-session.ts` | binder 读写、remember / forget |
 | `src/lib/agent/gtero-run.ts` | sticky `runOnce` + lane |
+| `src/lib/agent/run-wait.ts` | 先订阅再 `runOnce`；缓冲终端事件 + 超时 |
 | `src/lib/agent/gtero-prompts.ts` | 解释 / 库综合 prompt |
 | `src/lib/agent/notes-patch.ts` | 追加 NOTES 段落（引用 + 页码 + 解释） |
 | `src/lib/agent/paper-context.ts` | `[Gtero focus]` 压缩块 |
 | `src/lib/pdf/ask/prompt.ts` | 划词提问 prompt；resume 时不重发卡片历史 |
-| `src/components/agent/use-agent-panel.ts` | 聊天恢复、分叉、库综合 |
+| `src/components/agent/use-agent-panel.ts` | 面板编排：粘性线程、分叉确认、vault binder 恢复 |
+| `src/components/agent/hooks/use-agent-session-runtime.ts` | 聊天完成/失败；resume 分类 |
+| `src/components/agent/hooks/use-agent-send.ts` | 库综合 / sticky send |
 | `src/components/agent/gtero-fork-dialog.tsx` | 分叉确认 Dialog |
-| `src/components/viewer/pdf/pdf-viewer.tsx` | 划词解释 / 写笔记 / sticky ask |
+| `src/components/viewer/pdf/pdf-viewer.tsx` | PDF 阅读器外壳（0.6 布局，非 `embed/`） |
+| `src/components/viewer/pdf/hooks/use-pdf-ask-threads.ts` | 划词提问 sticky ask |
+| `src/components/viewer/pdf/hooks/use-pdf-selection-translate.ts` | 划词解释 / 写笔记 |
 | `src/lib/paper/reader.ts` | 精读走 sticky + 追加 NOTES 指令 |
 
 Host：`features/agent/prompts.rs`（`corpus_synthesis`、精读追加）、`features/settings`（`GteroSettings`）。ACP 会话本身见 [../backend/agent.md](../backend/agent.md)。

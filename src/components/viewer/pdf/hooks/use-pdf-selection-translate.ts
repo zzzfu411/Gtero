@@ -34,23 +34,20 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
-import {
-	cancelAgentRun,
-	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	listenAgentStream,
-	runOnce,
-} from "@/lib/agent";
+import { cancelAgentRun, listAgents, runOnce } from "@/lib/agent";
 import { buildExplainPrompt } from "@/lib/agent/gtero-prompts";
-import {
-	clearGteroRunAttempt,
-	runOnceGtero,
-} from "@/lib/agent/gtero-run";
+import { clearGteroRunAttempt, runOnceGtero } from "@/lib/agent/gtero-run";
 import {
 	appendNotesSection,
 	formatSelectionNoteBody,
 } from "@/lib/agent/notes-patch";
+import {
+	AgentRunDisposedError,
+	AgentRunTimeoutError,
+	DEFAULT_AGENT_RUN_TIMEOUT_MS,
+	isAgentRunAbortError,
+	subscribeAgentRun,
+} from "@/lib/agent/run-wait";
 import { rememberGteroSession } from "@/lib/agent/vault-session";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { gteroUserFacingError } from "@/lib/pdf/ask";
@@ -179,6 +176,9 @@ export function usePdfSelectionTranslate({
 	}, [activeSessionRef, translateStreamingRef]);
 
 	const stopTranslateSession = useCallback(() => {
+		const unsubs = translateUnsubsRef.current;
+		translateUnsubsRef.current = null;
+		if (unsubs) for (const u of unsubs) u();
 		const sid = translateSessionRef.current;
 		if (sid) {
 			void cancelAgentRun(sid).catch(() => undefined);
@@ -290,42 +290,10 @@ export function usePdfSelectionTranslate({
 						}
 						const agentId = resolved.agentId;
 						const modelId = resolved.modelId;
-						const accepted = await runOnce({
-							prompt,
-							agentId,
-							modelId,
-							sessionId:
-								getAgentTranslateSessionId(paperKey, agentId, modelId) ??
-								undefined,
-							vaultPath: vaultPath ?? undefined,
-							workflow: "free",
-							autoApprove: true,
-							hideFromChatHistory: true,
-						});
-						if (translateDisposedRef.current) {
-							// Viewer unmounted while the run was being accepted: drop it.
-							void cancelAgentRun(accepted.sessionId).catch(() => undefined);
-							return;
-						}
-						const sessionId = accepted.sessionId;
-						translateSessionRef.current = sessionId;
-						activeSessionRef.current = sessionId;
-						const unsubs: UnlistenFn[] = [];
-						translateUnsubsRef.current = unsubs;
-						const cleanup = () => {
-							for (const u of unsubs) u();
-							if (translateUnsubsRef.current === unsubs)
-								translateUnsubsRef.current = null;
-							if (translateSessionRef.current === sessionId)
-								translateSessionRef.current = null;
-							if (activeSessionRef.current === sessionId)
-								activeSessionRef.current = null;
-							translateStreamingRef.current = false;
-							setTranslateStreaming(false);
-						};
-						unsubs.push(
-							await listenAgentStream((ev) => {
-								if (ev.sessionId !== sessionId) return;
+						const waiter = await subscribeAgentRun({
+							timeoutMs: DEFAULT_AGENT_RUN_TIMEOUT_MS,
+							timeoutError: t("pdfAsk.agentTimeout"),
+							onStream: (ev) => {
 								if ((ev.kind ?? "message") === "thought") return;
 								const latest =
 									translatesRef.current.find((r) => r.id === rec.id) ?? rec;
@@ -335,47 +303,83 @@ export function usePdfSelectionTranslate({
 									updatedAt: new Date().toISOString(),
 									error: undefined,
 								});
-							}),
-						);
-						unsubs.push(
-							await listenAgentCompleted((ev) => {
-								if (ev.sessionId !== sessionId) return;
-								const latest =
-									translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-								const next = {
-									...latest,
-									result: (ev.content || latest.result || "").trim(),
-									updatedAt: new Date().toISOString(),
-									error: undefined,
-								};
-								upsertTranslate(next);
-								void persistTranslate(next);
-								setTranslateError(null);
-								if (ev.providerSessionId && ev.stopReason !== "cancelled") {
-									setAgentTranslateSessionId(
-										paperKey,
-										agentId,
-										modelId,
-										ev.providerSessionId,
-									);
-								}
-								cleanup();
-							}),
-						);
-						unsubs.push(
-							await listenAgentFailed((ev) => {
-								if (ev.sessionId !== sessionId) return;
-								evictAgentTranslateSessionId(paperKey, agentId, modelId);
-								const msg = ev.error || t("pdfAsk.agentFailed");
-								notifyError(msg);
-								markTranslateFailure(rec.id, msg);
-								cleanup();
-							}),
-						);
-						if (translateDisposedRef.current) {
-							// Viewer unmounted while the listeners were being attached.
+							},
+						});
+						const unsubs: UnlistenFn[] = [() => waiter.dispose()];
+						translateUnsubsRef.current = unsubs;
+						let sessionId: string | undefined;
+						const cleanup = () => {
+							waiter.dispose();
+							if (translateUnsubsRef.current === unsubs)
+								translateUnsubsRef.current = null;
+							if (sessionId && translateSessionRef.current === sessionId)
+								translateSessionRef.current = null;
+							if (sessionId && activeSessionRef.current === sessionId)
+								activeSessionRef.current = null;
+							translateStreamingRef.current = false;
+							setTranslateStreaming(false);
+						};
+						try {
+							const accepted = await runOnce({
+								prompt,
+								agentId,
+								modelId,
+								sessionId:
+									getAgentTranslateSessionId(paperKey, agentId, modelId) ??
+									undefined,
+								vaultPath: vaultPath ?? undefined,
+								workflow: "free",
+								autoApprove: true,
+								hideFromChatHistory: true,
+							});
+							if (translateDisposedRef.current) {
+								void cancelAgentRun(accepted.sessionId).catch(() => undefined);
+								return;
+							}
+							sessionId = accepted.sessionId;
+							translateSessionRef.current = sessionId;
+							activeSessionRef.current = sessionId;
+							const ev = await waiter.wait(sessionId);
+							const latest =
+								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+							const next = {
+								...latest,
+								result: (ev.content || latest.result || "").trim(),
+								updatedAt: new Date().toISOString(),
+								error: undefined,
+							};
+							upsertTranslate(next);
+							void persistTranslate(next);
+							setTranslateError(null);
+							if (ev.providerSessionId && ev.stopReason !== "cancelled") {
+								setAgentTranslateSessionId(
+									paperKey,
+									agentId,
+									modelId,
+									ev.providerSessionId,
+								);
+							}
+						} catch (waitErr) {
+							if (sessionId) {
+								void cancelAgentRun(sessionId).catch(() => undefined);
+							}
+							evictAgentTranslateSessionId(paperKey, agentId, modelId);
+							if (
+								translateDisposedRef.current ||
+								waitErr instanceof AgentRunDisposedError ||
+								isAgentRunAbortError(waitErr)
+							)
+								return;
+							const msg =
+								waitErr instanceof AgentRunTimeoutError
+									? waitErr.message
+									: waitErr instanceof Error
+										? waitErr.message
+										: t("pdfAsk.agentFailed");
+							notifyError(msg);
+							markTranslateFailure(rec.id, msg);
+						} finally {
 							cleanup();
-							return;
 						}
 					} catch (e) {
 						const message = e instanceof Error ? e.message : String(e);
@@ -460,10 +464,7 @@ export function usePdfSelectionTranslate({
 			void (async () => {
 				try {
 					const registry = await listAgents().catch(() => null);
-					const pdfAsk = resolveTranslateAgent(
-						loadSettings().pdfAsk,
-						registry,
-					);
+					const pdfAsk = resolveTranslateAgent(loadSettings().pdfAsk, registry);
 					const translate = resolveTranslateAgent(
 						loadSettings().translate,
 						registry,
@@ -475,38 +476,10 @@ export function usePdfSelectionTranslate({
 						markTranslateFailure(rec.id, msg);
 						return;
 					}
-					const accepted = await runOnceGtero({
-						prompt,
-						agentId: resolved.agentId,
-						modelId: resolved.modelId,
-						vaultPath: vaultPath ?? undefined,
-						workflow: "free",
-						autoApprove: true,
-						hideFromChatHistory: true,
-					});
-					if (translateDisposedRef.current) {
-						void cancelAgentRun(accepted.sessionId).catch(() => undefined);
-						return;
-					}
-					const sessionId = accepted.sessionId;
-					translateSessionRef.current = sessionId;
-					activeSessionRef.current = sessionId;
-					const unsubs: UnlistenFn[] = [];
-					translateUnsubsRef.current = unsubs;
-					const cleanup = () => {
-						for (const u of unsubs) u();
-						if (translateUnsubsRef.current === unsubs)
-							translateUnsubsRef.current = null;
-						if (translateSessionRef.current === sessionId)
-							translateSessionRef.current = null;
-						if (activeSessionRef.current === sessionId)
-							activeSessionRef.current = null;
-						translateStreamingRef.current = false;
-						setTranslateStreaming(false);
-					};
-					unsubs.push(
-						await listenAgentStream((ev) => {
-							if (ev.sessionId !== sessionId) return;
+					const waiter = await subscribeAgentRun({
+						timeoutMs: DEFAULT_AGENT_RUN_TIMEOUT_MS,
+						timeoutError: t("selection.agentTimeout"),
+						onStream: (ev) => {
 							if ((ev.kind ?? "message") === "thought") return;
 							const latest =
 								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
@@ -516,48 +489,80 @@ export function usePdfSelectionTranslate({
 								updatedAt: new Date().toISOString(),
 								error: undefined,
 							});
-						}),
-					);
-					unsubs.push(
-						await listenAgentCompleted((ev) => {
-							if (ev.sessionId !== sessionId) return;
-							if (ev.providerSessionId && vaultPath) {
-								void rememberGteroSession(vaultPath, ev.providerSessionId);
-							}
-							clearGteroRunAttempt(sessionId);
-							const latest =
-								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-							const next = {
-								...latest,
-								result: (ev.content || latest.result || "").trim(),
-								updatedAt: new Date().toISOString(),
-								error: undefined,
-							};
-							upsertTranslate(next);
-							void persistTranslate(next);
-							setTranslateError(null);
-							cleanup();
-						}),
-					);
-					unsubs.push(
-						await listenAgentFailed((ev) => {
-							if (ev.sessionId !== sessionId) return;
-							void gteroUserFacingError(
-								ev.error,
-								{
-									sessionLost: t("selection.sessionLost"),
-									sessionRetry: t("selection.sessionRetry"),
-									fallback: t("pdfAsk.agentFailed"),
-								},
-								{ localSessionId: sessionId },
-							).then((msg) => {
-								notifyError(msg);
-								markTranslateFailure(rec.id, msg);
-								cleanup();
-							});
-						}),
-					);
-					if (translateDisposedRef.current) {
+						},
+					});
+					const unsubs: UnlistenFn[] = [() => waiter.dispose()];
+					translateUnsubsRef.current = unsubs;
+					let sessionId: string | undefined;
+					const cleanup = () => {
+						waiter.dispose();
+						if (translateUnsubsRef.current === unsubs)
+							translateUnsubsRef.current = null;
+						if (sessionId && translateSessionRef.current === sessionId)
+							translateSessionRef.current = null;
+						if (sessionId && activeSessionRef.current === sessionId)
+							activeSessionRef.current = null;
+						translateStreamingRef.current = false;
+						setTranslateStreaming(false);
+					};
+					try {
+						const accepted = await runOnceGtero({
+							prompt,
+							agentId: resolved.agentId,
+							modelId: resolved.modelId,
+							vaultPath: vaultPath ?? undefined,
+							workflow: "free",
+							autoApprove: true,
+							hideFromChatHistory: true,
+						});
+						if (translateDisposedRef.current) {
+							void cancelAgentRun(accepted.sessionId).catch(() => undefined);
+							return;
+						}
+						sessionId = accepted.sessionId;
+						translateSessionRef.current = sessionId;
+						activeSessionRef.current = sessionId;
+						const ev = await waiter.wait(sessionId);
+						if (ev.providerSessionId && vaultPath) {
+							void rememberGteroSession(vaultPath, ev.providerSessionId);
+						}
+						clearGteroRunAttempt(sessionId);
+						const latest =
+							translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+						const next = {
+							...latest,
+							result: (ev.content || latest.result || "").trim(),
+							updatedAt: new Date().toISOString(),
+							error: undefined,
+						};
+						upsertTranslate(next);
+						void persistTranslate(next);
+						setTranslateError(null);
+					} catch (waitErr) {
+						if (sessionId) {
+							void cancelAgentRun(sessionId).catch(() => undefined);
+						}
+						if (
+							translateDisposedRef.current ||
+							waitErr instanceof AgentRunDisposedError ||
+							isAgentRunAbortError(waitErr)
+						)
+							return;
+						const message =
+							waitErr instanceof AgentRunTimeoutError
+								? waitErr.message
+								: await gteroUserFacingError(
+										waitErr,
+										{
+											sessionLost: t("selection.sessionLost"),
+											sessionRetry: t("selection.sessionRetry"),
+											fallback: t("pdfAsk.agentFailed"),
+										},
+										sessionId ? { localSessionId: sessionId } : undefined,
+									);
+						notifyError(message);
+						markTranslateFailure(rec.id, message);
+					} finally {
 						cleanup();
 					}
 				} catch (e) {
@@ -627,13 +632,7 @@ export function usePdfSelectionTranslate({
 				}
 			})();
 		},
-		[
-			paperAbsPath,
-			translateStreaming,
-			t,
-			translatesRef,
-			activeCardRef,
-		],
+		[paperAbsPath, translateStreaming, t, translatesRef, activeCardRef],
 	);
 
 	const deleteTranslateCard = useCallback(() => {

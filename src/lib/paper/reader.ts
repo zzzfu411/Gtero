@@ -10,17 +10,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
 import {
-	type AgentFailedEvent,
 	type AgentPlanEntry,
-	type AgentPlanEvent,
-	type AgentResultPayload,
 	type AgentTemplate,
-	type AgentToolEvent,
 	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	listenAgentPlan,
-	listenAgentTool,
 	type RunOnceAccepted,
 } from "@/lib/agent";
 import {
@@ -28,6 +20,11 @@ import {
 	handleGteroResumeFailure,
 	runOnceGtero,
 } from "@/lib/agent/gtero-run";
+import {
+	AgentRunTimeoutError,
+	PAPER_READER_RUN_TIMEOUT_MS,
+	subscribeAgentRun,
+} from "@/lib/agent/run-wait";
 import { rememberGteroSession } from "@/lib/agent/vault-session";
 import {
 	enqueueBackgroundTask,
@@ -141,86 +138,25 @@ function planDetail(entries: AgentPlanEntry[]): string {
 }
 
 /**
- * Wait for agent:completed / agent:failed for a sessionId.
- * Also forwards plan/tool progress into the background task.
+ * Subscribe to agent:completed / agent:failed (and plan/tool progress)
+ * *before* `runOnce`. Host `agent_run_once` is fire-and-forget; a fast
+ * `agent:failed` is otherwise missed and the task hangs forever.
  */
-async function waitForAgentSession(
-	sessionId: string,
-	taskId: string,
-): Promise<AgentResultPayload> {
-	return new Promise((resolve, reject) => {
-		let settled = false;
-		const unsubs: Array<() => void> = [];
-
-		const cleanup = () => {
-			for (const u of unsubs) {
-				try {
-					u();
-				} catch {
-					// ignore
-				}
+async function subscribePaperReaderWait(taskId: string) {
+	return subscribeAgentRun({
+		timeoutMs: PAPER_READER_RUN_TIMEOUT_MS,
+		timeoutError: i18n.t("app:tasks.paperReadTimeout"),
+		onPlan: (ev) => {
+			updateBackgroundTask(taskId, {
+				detail: planDetail(ev.entries ?? []),
+			});
+		},
+		onTool: (ev) => {
+			const title = ev.title?.trim();
+			if (title) {
+				updateBackgroundTask(taskId, { detail: title });
 			}
-		};
-
-		const finishOk = (payload: AgentResultPayload) => {
-			if (settled) return;
-			settled = true;
-			cleanup();
-			resolve(payload);
-		};
-
-		const finishErr = (error: string) => {
-			if (settled) return;
-			settled = true;
-			cleanup();
-			reject(new Error(error));
-		};
-
-		void (async () => {
-			try {
-				unsubs.push(
-					await listenAgentCompleted((ev: AgentResultPayload) => {
-						if (ev.sessionId !== sessionId) return;
-						finishOk(ev);
-					}),
-				);
-				unsubs.push(
-					await listenAgentFailed((ev: AgentFailedEvent) => {
-						if (ev.sessionId !== sessionId) return;
-						void handleGteroResumeFailure({
-							error: ev.error || i18n.t("app:tasks.paperReadFailed"),
-							localSessionId: sessionId,
-							copy: {
-								sessionLost: i18n.t("agent:messages.sessionLost"),
-								sessionRetry: i18n.t("agent:messages.sessionRetry"),
-								fallback: ev.error || i18n.t("app:tasks.paperReadFailed"),
-							},
-						}).then((msg) => finishErr(msg));
-					}),
-				);
-				unsubs.push(
-					await listenAgentPlan((ev: AgentPlanEvent) => {
-						if (ev.sessionId !== sessionId) return;
-						updateBackgroundTask(taskId, {
-							detail: planDetail(ev.entries ?? []),
-						});
-					}),
-				);
-				unsubs.push(
-					await listenAgentTool((ev: AgentToolEvent) => {
-						if (ev.sessionId !== sessionId) return;
-						const title = ev.title?.trim();
-						if (title) {
-							updateBackgroundTask(taskId, {
-								detail: title,
-							});
-						}
-					}),
-				);
-			} catch (e) {
-				finishErr(e instanceof Error ? e.message : String(e));
-			}
-		})();
+		},
 	});
 }
 
@@ -259,6 +195,8 @@ export async function runPaperReaderWorkflow(opts: {
 				const skillStyle = skillMentionStyleForTemplate(template);
 				const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
 
+				const waiter = await subscribePaperReaderWait(id);
+				let sessionId: string | undefined;
 				try {
 					const accepted: RunOnceAccepted = await runOnceGtero({
 						vaultPath: opts.vaultRoot,
@@ -270,6 +208,7 @@ export async function runPaperReaderWorkflow(opts: {
 						// Background workflow — never surface in Agent chat history.
 						hideFromChatHistory: true,
 					});
+					sessionId = accepted.sessionId;
 					const cancelAgent = () => {
 						void invoke("agent_cancel_run", { sessionId: accepted.sessionId });
 					};
@@ -280,7 +219,7 @@ export async function runPaperReaderWorkflow(opts: {
 					signal.addEventListener("abort", cancelAgent, { once: true });
 
 					setDetail(i18n.t("app:tasks.paperReadRunning"));
-					const result = await waitForAgentSession(accepted.sessionId, id);
+					const result = await waiter.wait(accepted.sessionId, { signal });
 					clearGteroRunAttempt(accepted.sessionId);
 					if (result.providerSessionId) {
 						await rememberGteroSession(
@@ -296,6 +235,12 @@ export async function runPaperReaderWorkflow(opts: {
 					if (signal.aborted || isBackgroundTaskCancelledError(e)) {
 						throw e;
 					}
+					if (e instanceof AgentRunTimeoutError) {
+						if (sessionId) {
+							void invoke("agent_cancel_run", { sessionId });
+						}
+						throw e;
+					}
 					const msg = await handleGteroResumeFailure({
 						error: e,
 						copy: {
@@ -305,6 +250,8 @@ export async function runPaperReaderWorkflow(opts: {
 						},
 					});
 					throw new Error(msg);
+				} finally {
+					waiter.dispose();
 				}
 			},
 		);
@@ -325,6 +272,23 @@ export function paperAssetsReadyForReader(flags: {
 	return Boolean(flags.tex || flags.paperMd || flags.pdf);
 }
 
+/** Auto paper-reader only for a single paper in one user action. */
+export const AFTER_IMPORT_AUTO_READER_MAX = 1;
+
+/**
+ * Auto paper-reader is only for a single newly ingested paper.
+ * Bulk wand paste / multi-PDF / library bib import must not fan out Agent runs.
+ */
+export function shouldAutoRunAfterPaperImport(
+	importedCount: number,
+	submitCount: number = importedCount,
+): boolean {
+	return (
+		submitCount === AFTER_IMPORT_AUTO_READER_MAX &&
+		importedCount === AFTER_IMPORT_AUTO_READER_MAX
+	);
+}
+
 /**
  * After import / download: if Settings → Agent → auto paper-reader is on,
  * assets are ready, and catalog `is_read` is false, start paper-reader
@@ -333,6 +297,9 @@ export function paperAssetsReadyForReader(flags: {
  * Default setting is **off**. Does not throw on skip; rethrows agent/workflow
  * failures so callers can surface errors. Manual Zap always uses
  * {@link runPaperReaderWorkflow} directly.
+ *
+ * Callers: `afterPaperImport` from magic-wand (single), local PDF (single),
+ * and single Download — not bulk ingest.
  */
 export async function maybeAutoRunPaperReader(opts: {
 	vaultRoot: string;

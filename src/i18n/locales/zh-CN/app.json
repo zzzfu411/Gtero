@@ -242,6 +242,7 @@
 		"paperReadMarking": "正在标记为已读…",
 		"paperReadDone": "精读完成",
 		"paperReadFailed": "精读失败",
+		"paperReadTimeout": "精读超时",
 		"connector": "正在保存 Connector 附件",
 		"connectorComplete": "Connector 附件已就绪",
 		"connectorFailed": "Connector 附件失败"

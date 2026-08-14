@@ -4,12 +4,11 @@
  */
 
 import i18n from "@/i18n";
+import { listAgents, runOnce } from "@/lib/agent";
 import {
-	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	runOnce,
-} from "@/lib/agent";
+	DEFAULT_AGENT_RUN_TIMEOUT_MS,
+	subscribeAgentRun,
+} from "@/lib/agent/run-wait";
 import { logger } from "@/lib/core/logger";
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
 import {
@@ -571,42 +570,37 @@ async function resolveLayoutTranslateAgentOpts(options: {
 					agentId,
 					modelId,
 				);
-				const accepted = await runOnce({
-					prompt,
-					agentId,
-					modelId,
-					sessionId: cachedSessionId ?? undefined,
-					vaultPath: vaultPath ?? undefined,
-					workflow: "free",
-					autoApprove: true,
-					hideFromChatHistory: true,
+				const waiter = await subscribeAgentRun({
+					timeoutMs: DEFAULT_AGENT_RUN_TIMEOUT_MS,
+					timeoutError: i18n.t("viewer:pdfAsk.agentTimeout"),
 				});
-				const sessionId = accepted.sessionId;
-				return await new Promise<string>((resolve, reject) => {
-					const unsubs: Array<() => void> = [];
-					const cleanup = () => {
-						for (const u of unsubs) u();
-					};
-					void listenAgentCompleted((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						cleanup();
-						if (ev.providerSessionId && ev.stopReason !== "cancelled") {
-							setAgentTranslateSessionId(
-								paperKey,
-								agentId,
-								modelId,
-								ev.providerSessionId,
-							);
-						}
-						resolve((ev.content ?? "").trim());
-					}).then((u) => unsubs.push(u));
-					void listenAgentFailed((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						cleanup();
-						evictAgentTranslateSessionId(paperKey, agentId, modelId);
-						reject(new Error(ev.error || "Agent translation failed"));
-					}).then((u) => unsubs.push(u));
-				});
+				try {
+					const accepted = await runOnce({
+						prompt,
+						agentId,
+						modelId,
+						sessionId: cachedSessionId ?? undefined,
+						vaultPath: vaultPath ?? undefined,
+						workflow: "free",
+						autoApprove: true,
+						hideFromChatHistory: true,
+					});
+					const ev = await waiter.wait(accepted.sessionId);
+					if (ev.providerSessionId && ev.stopReason !== "cancelled") {
+						setAgentTranslateSessionId(
+							paperKey,
+							agentId,
+							modelId,
+							ev.providerSessionId,
+						);
+					}
+					return (ev.content ?? "").trim();
+				} catch (e) {
+					evictAgentTranslateSessionId(paperKey, agentId, modelId);
+					throw e;
+				} finally {
+					waiter.dispose();
+				}
 			},
 		},
 	};
