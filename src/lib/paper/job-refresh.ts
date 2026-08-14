@@ -12,6 +12,7 @@ import type {
 	JobState,
 } from "@/lib/core/job-center";
 import { isTauri } from "@/lib/core/tauri";
+import { notifyPaperAssetsJobSettled } from "@/lib/paper/after-import";
 import { scheduleLibraryRefresh } from "@/lib/paper/library-store";
 
 const REFRESH_ON_KINDS: ReadonlySet<JobKind> = new Set([
@@ -37,6 +38,7 @@ export function startJobCompletionRefresh(): void {
 		if (!REFRESH_ON_KINDS.has(job.kind)) return;
 		if (!isTerminalJobState(job.state)) return;
 		scheduleLibraryRefresh();
+		notifyPaperAssetsJobSettled(job);
 	}).then((u) => {
 		unlisten = u;
 	});

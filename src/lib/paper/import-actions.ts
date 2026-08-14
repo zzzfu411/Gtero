@@ -11,6 +11,7 @@ import {
 import { invokeApi } from "@/lib/core/ipc";
 import { logger } from "@/lib/core/logger";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
+import { afterPaperImport } from "@/lib/paper/after-import";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
 	libraryStore,
@@ -77,6 +78,7 @@ export async function lookupSubmit(
 	if (texts.length === 0) return;
 	const settings = getSettings();
 	const openImported = opts.openImported ?? true;
+	const submitCount = texts.map((t) => t.trim()).filter(Boolean).length;
 
 	for (const text of texts) {
 		const input = text.trim();
@@ -163,6 +165,12 @@ export async function lookupSubmit(
 					notifyError(`${input}: ${result.errors.join("; ")}`);
 				}
 				await opts.onComplete?.(result);
+
+				afterPaperImport({
+					vaultRoot: vaultPath,
+					papers: result.imported,
+					batchSize: submitCount,
+				});
 
 				// Enqueue a DownloadAssets job for each newly imported paper that
 				// still lacks assets. Uses the CapsCache-backed query (§8.4) instead
@@ -314,6 +322,14 @@ export async function importLocalPdf(opts?: {
 					});
 				}
 			}
+			afterPaperImport({
+				vaultRoot: vaultPath,
+				papers: result.papers.map((paper) => ({
+					...paper,
+					// Local PDF ingest always copied a PDF; host flags may omit `pdf`.
+					pdf: paper.pdf ?? true,
+				})),
+			});
 			if (result.errors.length) {
 				notifyWarning(
 					`${i18n.t("sidebar:papersLibrary.importPdfDone", { count: result.papers.length })}; ${result.errors.slice(0, 2).join("; ")}`,

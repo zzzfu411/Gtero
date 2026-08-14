@@ -83,7 +83,7 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 **精读（Zap 图标 + 自动触发）**：
 
 - **显示条件（Zap）**：本地资源齐全且 catalog **`is_read === false`**（与 Download 互斥）。
-- **自动触发**：`lookup_import_batch`（魔棒，单条）或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读正文/归档就绪时，前端 `maybeAutoRunPaperReader` 自动跑同一工作流（批量 Library 导入/批量 Download **不**自动连跑，避免并发炸 Agent）。
+- **自动触发**：前端 `afterPaperImport`（`src/lib/paper/after-import.ts`）统一后置。魔棒**单条**成功（资源已就绪，或该篇 JobCenter `downloadAssets` 完成后）、本地 PDF **单篇**导入成功、或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读时，`maybeAutoRunPaperReader` 自动跑同一工作流。批量 Library 导入 / 魔棒一次贴多篇 / 多 PDF / 批量 Download **不**自动连跑（`shouldAutoRunAfterPaperImport`：`submitCount === 1 && importedCount === 1`），避免并发炸 Agent。
 - **手动**：点击 Zap → 同上。
 - **实现**：`src/lib/paper/reader.ts` → `agent_run_once` + skill（**`hideFromChatHistory: true`**，不进 Agent 对话记录）；Codex `$paper-reader` / Claude `/paper-reader` / 其它注入 `SKILL.md` → 写 `{paper}/NOTES.md` → `paper_set_is_read(true)`；进度在左下角后台任务条。
 - **进度**：左下角后台任务条——入库/下载阶段 `kind=lookup|download`（分阶段 detail/progress），随后精读 `kind=paperRead`。
@@ -528,7 +528,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 
 魔棒界面使用通用的 `enqueueBackgroundTask` 为每个输入创建一个独立的前端任务。任务面板只展示每个标识符的状态和资源进度，不展示 Host 批处理的内部阶段或聚合计数；并发限制由同类任务共享的信号量执行。
 
-- **不自动精读**：批量入库不连跑 `paper-reader`，避免 Agent 与写笔记开销爆炸；用户可后续单篇手动 Zap 或等设置 `autoPaperReader` 对单篇触发。
+- **不自动精读**：批量入库不连跑 `paper-reader`，避免 Agent 与写笔记开销爆炸；单条成功由 `afterPaperImport` 在资源就绪（或该篇补下完成）后触发。用户可后续单篇手动 Zap。
 
 ### 6.5 事件
 

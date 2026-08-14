@@ -1286,7 +1286,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
 - **前端**：`src/lib/paper/api.ts` → `setPaperIsRead`；paper-reader 工作流成功结束后置 `true`。
 - **说明**：与 `status`（入库态）无关；默认 `false`。触发路径：
-  - **自动**：魔棒 `lookup_import_batch`（单条）/ 单篇 `paper_download_assets` 成功且资源就绪时，前端 `maybeAutoRunPaperReader`（批量导入/批量 Download 不连跑）。
+  - **自动**：前端 `afterPaperImport`：魔棒 `lookup_import_batch`（单条，资源就绪或该篇补下完成后）/ 本地 PDF 单篇 / 单篇 `paper_download_assets` 成功且资源就绪时 → `maybeAutoRunPaperReader`（批量导入/批量 Download 不连跑）。
   - **手动**：文件树在「资源齐全且 `is_read === false`」时显示 **Zap** 图标。
   - 实现：`src/lib/paper/reader.ts`（进度 `kind=paperRead`；可与 lookup/download 任务衔接）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
@@ -1366,11 +1366,11 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 根级 `PAPERS.md` / `library.bib` **默认不存在**；需要时显式导出。完整约定见 [`catalog.md`](catalog.md)。
 
-#### `catalog:export_papers_md`
+#### `catalog:export_papers_md`（规划中，未实现）
 
-从 `papers` 表生成 Markdown 索引表（历史 `PAPERS.md` 形态）。
+Host **没有**这条 command。从 `papers` 表生成 Markdown 索引表（历史 `PAPERS.md` 形态）仍在路线图；现有导出走 [`paper_export`](#paper_export)（BibTeX 等，经 Translator）。
 
-- **参数**
+拟定参数（实现时再注册）：
 
 ```ts
 {
@@ -1380,23 +1380,11 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 }
 ```
 
-- **返回**
+拟定返回：`{ ok: true; data: { content: string; written_path?: string } }`。
 
-```ts
-{
-  ok: true;
-  data: {
-    content: string;
-    written_path?: string;
-  };
-}
-```
+#### `catalog:export_bibtex`（规划中，未实现）
 
-#### `catalog:export_bibtex`
-
-从 catalog 生成 BibTeX 汇总（历史 `library.bib` 形态）。
-
-- **参数 / 返回**：同 `catalog:export_papers_md`（`content` 为 BibTeX 文本）。
+Host **没有**这条 command。BibTeX 汇总走 `paper_export`（`format: "bibtex"`）。拟定参数 / 返回同上方 `catalog:export_papers_md`。
 
 ### 3.7 Agent 工作流（ACP Client + BYOA）
 
@@ -2256,7 +2244,7 @@ UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，
 | V0.4 | `graph:*`（双链 / 反链 / 图谱）；前端文件变更防抖 `graph_rebuild`。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
 | ≤0.5.0 | 全局 Dockview、视觉批注、版面分析、公式解析卡、阅读热力条、Zotero collection tree 迁移、Agent 自动安装/升级、自由模型选择等已发布能力见功能文档；Host 侧一般无需新 paper API。见 [`../frontend/workspace.md`](../frontend/workspace.md)。 |
-| 0.6 | 引用关系：`paper_refs_*`（含 `paper_refs_graph` 引用图谱）、可选 catalog `paper_refs` 表 / Connected Papers 邻域加深；与 `graph:*` 双链 API 并存。 |
+| 0.6 | 引用关系：`paper_refs_*`（含 `paper_refs_graph` 引用图谱）、可选 catalog `paper_refs` 表 / Connected Papers 邻域加深；与 `graph:*` 双链 API 并存。Gtero sticky 复用已有 `agent_run_once({ sessionId })` / `session/resume`，无新 catalog command；拒绝前缀见 [agent.md](agent.md)。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`paper-import.md`](paper-import.md)）。 |
 
 后续扩展：

@@ -8,7 +8,7 @@
 - 粘贴一个或多个论文标识符或 Skill 来源（空格/逗号/分号/换行）；去重后顺序处理。
 - 目标：`papers/` 或当前选中的 Papers 子文件夹。
 - 弹层内 **FileUp**：多选本地 PDF。
-- 成功后：刷新树、展开并滚到新论文、`openPaper`；批量**不**自动连跑精读。
+- 成功后：刷新树、展开并滚到新论文、`openPaper`；**单条**走 `afterPaperImport`（资源已就绪则立刻精读，否则等该篇 `downloadAssets` 完成后精读）。一次粘贴多篇 / 10+ 批量**不**自动连跑精读。
 - 同一条 identifier lookup 管线可由其它入口复用；调用侧可通过 `lookupSubmit(texts, { openImported: false })` 关闭导入后自动打开。
 - Host：`lookup_import_batch` 等。
 
@@ -46,11 +46,12 @@ PDF 解析最多等待 120 秒，取消任务会终止当前解析子进程。�
 
 ## 补资源 / 精读触发
 
-- Download：缺 PDF 或无正文资源时。
+- Download：缺 PDF 或无正文资源时。单篇 Download 成功且资源就绪时走同一 `afterPaperImport`。
+- 本地 PDF：单篇入库走同一 `afterPaperImport`（刚拷入的 PDF 视为资源就绪）；一次拖入/多选多篇**不**连跑。
 - Zap / 自动精读：见 [agent.md](agent.md)。
 
 ## 代码
 
-- `src/lib/paper/lookup.ts`、`import-actions.ts`、`import/`
+- `src/lib/paper/lookup.ts`、`import-actions.ts`、`after-import.ts`、`import/`
 - `src/components/sidebar/` 魔棒 Popover、本地 PDF 对话框
 - `src/components/library/library-pdf-drop-surface.tsx` Library 拖入

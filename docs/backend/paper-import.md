@@ -103,7 +103,7 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 
 - 关键词/描述 → Agent 候选确认后入库（路线图 0.3）。
 - 可插拔 `PdfParser`（liteparse 默认 + 可选 MinerU BYOK）（路线图 0.4）。
-- 统一 `afterPaperImport` / `paper:imported` 事件（路线图 0.3）。
+- 前端 `afterPaperImport` 已统一魔棒单条 / 本地 PDF 单篇 / 单篇 Download（批量跳过；单条缺资源则等该篇下载完成）。可选 `paper:imported` 事件仍为路线图 0.3。
 
 ## 代码
 

@@ -18,6 +18,7 @@ import {
 	paperDirFromPath,
 	resolvePapersParentDir,
 } from "@/lib/paper";
+import { afterPaperImport } from "@/lib/paper/after-import";
 import {
 	exportLibraryToFile,
 	importLibraryFromFile,
@@ -32,11 +33,7 @@ import {
 	setLibraryRescanning,
 } from "@/lib/paper/library-store";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
-import {
-	maybeAutoRunPaperReader,
-	paperAssetsReadyForReader,
-	runPaperReaderWorkflow,
-} from "@/lib/paper/reader";
+import { runPaperReaderWorkflow } from "@/lib/paper/reader";
 import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
 import type { FileNode } from "@/lib/vault";
@@ -172,36 +169,20 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 				return r;
 			},
 		);
-		// After PDF/TeX/PAPER.md ready → auto paper-reader with task progress.
-		if (
-			paperAssetsReadyForReader({
-				pdf: assets.pdf,
-				tex: assets.tex,
-				paperMd: assets.paperMd,
-			})
-		) {
-			// Fire-and-forget: reader progress shows in the task bar. Do NOT
-			// await — awaiting keeps every paper row busy during reading.
-			void maybeAutoRunPaperReader({
-				vaultRoot: vaultPath,
-				paperPath: rel,
-				assetsReady: true,
-			})
-				.then(async (started) => {
-					if (!started) return;
-					await refreshLibrary();
-					const notesAbs = notesPathForPaper(node.path);
-					try {
-						const content = await readVaultFile(notesAbs);
-						refreshTabNotes(node.path, content);
-					} catch {
-						// ignore
-					}
-				})
-				.catch((e) => {
-					notifyError(e instanceof Error ? e.message : String(e));
-				});
-		}
+		afterPaperImport({
+			vaultRoot: vaultPath,
+			papers: [
+				{
+					path: rel,
+					paperDir: node.path,
+					pdf: assets.pdf,
+					tex: assets.tex,
+					paperMd: assets.paperMd,
+				},
+			],
+			// This path already downloaded; do not wait for a JobCenter job.
+			awaitDownload: false,
+		});
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
 	}
