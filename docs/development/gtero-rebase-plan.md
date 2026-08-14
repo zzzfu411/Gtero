@@ -43,7 +43,7 @@
 
 ### B. P0 修复（在新基线上做，避免双修）
 
-1. **事件竞态**：精读 / PDF 快车道先订阅 `agent:completed|failed` 再 `runOnce`，或复用聊天面板的 pending terminal events；`waitForAgentSession` 必须有超时。
+1. **事件竞态**（已修）：精读 / PDF 快车道 `subscribeAgentRun` 先订阅 `agent:completed|failed` 再 `runOnce`，按 session id 缓冲终端事件；`wait` 有超时（精读 30min / PDF 10min）。聊天面板仍用 `pendingTerminalEventsRef`。
 2. **`refreshLibrary`**：失败保留旧 rows + `notifyError`，禁止 `setLibraryPapers([])`。
 3. **`afterPaperImport`**：魔棒单条成功、本地 PDF 导入、单篇 Download 走同一后置（`maybeAutoRunPaperReader` + refresh）。
 

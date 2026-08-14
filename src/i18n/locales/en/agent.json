@@ -178,6 +178,7 @@
 		"noAgent": "No available agent. Open Settings → Agent to configure one.",
 		"sessionUnavailable": "Could not restore this Agent session. Showing the saved answer snapshot when available.",
 		"sessionLost": "The vault Grok session could not be resumed. Start a new message to create a fresh thread.",
-		"sessionRetry": "The vault Grok session did not resume in time. Send again to retry the same thread."
+		"sessionRetry": "The vault Grok session did not resume in time. Send again to retry the same thread.",
+		"emptyResponse": "(empty response)"
 	}
 }

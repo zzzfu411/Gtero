@@ -25,5 +25,6 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。
 - [论文入库](backend/paper-import.md)
 - [Catalog](backend/catalog.md)
 - [Agent Host](backend/agent.md)
+- [Gtero（Grok 知识库线程）](frontend/gtero.md)
 - [Dockview 工作区](frontend/workspace.md)
 - [PDF 阅读与划词](frontend/pdf.md)

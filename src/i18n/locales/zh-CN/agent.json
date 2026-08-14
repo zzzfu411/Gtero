@@ -178,6 +178,7 @@
 		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。",
 		"sessionUnavailable": "无法恢复该 Agent 会话。若有本地回答快照会一并展示。",
 		"sessionLost": "无法恢复知识库 Grok 会话。再发一条消息以创建新线程。",
-		"sessionRetry": "暂时无法恢复知识库 Grok 会话。请再发一条消息以重试同一线程。"
+		"sessionRetry": "暂时无法恢复知识库 Grok 会话。请再发一条消息以重试同一线程。",
+		"emptyResponse": "（空回复）"
 	}
 }

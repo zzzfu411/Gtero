@@ -1,6 +1,6 @@
 # Agentero TODO
 
-仅列**未完成**项。当前发布 **`0.5.0`**。版本切片见 [`roadmap.md`](roadmap.md)；已实现能力见 [`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)。
+仅列**未完成**项。当前发布 **`0.6.0`**。版本切片见 [`roadmap.md`](roadmap.md)；已实现能力见 [`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)。
 
 ## 0.3 — 入库与 Agent 补强
 
@@ -12,13 +12,13 @@
 - [x] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [../backend/skill-import.md](../backend/skill-import.md)；首版）
 - [x] 论文导入资源阶段增加整篇 3 分钟超时，覆盖魔棒 / Connector / Bib-RIS（[#161](https://github.com/poco-ai/Agentero/issues/161)）
 - [ ] 本机 Translator sidecar 捆绑（可选）
-- [ ] 前端 `afterPaperImport` 策略表统一各入口后置
+- [x] 前端 `afterPaperImport` 策略表统一各入口后置（魔棒单条 / 本地 PDF 单篇 / 单篇 Download；批量跳过；单条缺资源等下载完成）
 - [ ] Zotero 迁移走 `paper_commit`；remote 镜像层收敛；统一 `paper:imported` 事件
 - [x] workflow prompt 自动注入 Vault 内 `AGENTS.md`（Host `build_prompt` 已将 `AGENTS.md` 作为 progressive disclosure 系统上下文注入）
 - [x] Gtero：每 Vault 一条 Grok sticky session；PDF 解释 / NOTES 追加 / 库综合（见 [../frontend/gtero.md](../frontend/gtero.md)）
 - [ ] 最近 Vault / UI 偏好与 XDG settings 完全对齐
 - [ ] 设置「打开/导出日志文件夹」
-- [ ] `catalog:export_papers_md`（Markdown 表）
+- [ ] `catalog:export_papers_md`（Markdown 表；**未实现** command，现有导出走 `paper_export`）
 - [x] CLI + 设置：聚合 Doctor 与论文 `NOTES.md` aliases 安全修复（[#198](https://github.com/poco-ai/Agentero/issues/198)）
 - [ ] CLI：`graph` / shell completions（只读 `wiki check` 与 Doctor 已实现）
 - [ ] CLI：`export papers-md`（随 Host 导出）

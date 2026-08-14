@@ -1,7 +1,7 @@
 # 发布前测试大纲（操作 Checklist）
 
 > **写法**：每一行都是 **界面 → 操作 → 预期效果**。验收时打开应用，按表逐步点选并勾选。  
-> **依据**：当前已落地能力（发布线 **0.5.0**）；不含路线图 0.6+（Connected Papers 邻域、引用图反向高亮、Vault 采纳等）未交付项。  
+> **依据**：当前已落地能力（发布线 **0.6.0**）；不含路线图未交付项（Connected Papers 邻域、引用图反向高亮、Vault 采纳等）。  
 > **环境**：至少 macOS；发布含 Windows/Linux 时，§0 + §1 各平台各跑一遍。  
 > **数据**：`pnpm demo:vault` / `pnpm demo:vault:downloads`；另备一次 Create Vault 空库。
 

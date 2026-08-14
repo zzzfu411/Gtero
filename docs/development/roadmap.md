@@ -1,6 +1,6 @@
 # Agentero 路线图
 
-**当前发布版本：`0.5.0`**
+**当前发布版本：`0.6.0`**
 
 已实现能力见功能文档（[`../frontend/`](../frontend/index.md) · [`../backend/`](../backend/index.md)），不在此重复勾选。  
 可执行 backlog 见 [`todo.md`](todo.md)。
@@ -12,23 +12,23 @@
 - 先做好精确入库与阅读闭环，再扩展发现流与文献引用图。
 - 不静默覆盖用户手写 Vault 文件。
 
-## 0.5.0 基线（已发布，摘要）
+## 0.6.0 基线（已发布，摘要）
 
-工作台 + Dockview 分屏、Catalog/Library/标签（含阅读热力条）、魔棒与本地 PDF 入库、Zotero Connector/迁移（含 collection tree 物化与条目重定位）、PDF 划词与翻译、PDF 版面分析（Figures/Tables/Algorithms/Formulas）、公式 hover 符号对照卡、视觉批注 v2（与 Agent 会话解耦）、BYOA Agent（精读/权限/自动安装升级/自由模型选择）、双链与 Graph、CLI（含 `layout`/`mark`）、远程 Vault MVP、Bridge + iOS 远程客户端 M2（TestFlight 已提交）、Release CI。细节以功能文档为准。
+0.5 工作台能力（Dockview 分屏、Catalog/Library/标签、魔棒与本地 PDF 入库、Zotero Connector/迁移、PDF 划词与翻译、版面分析、公式 hover 对照卡、视觉批注 v2、BYOA Agent、双链与 Graph、CLI `layout`/`mark`、远程 Vault MVP、Bridge + iOS M2、Release CI）之上，本线已交付参考文献解析 M1、References 侧栏、PDF citation hover、视觉批注 → Agent 会话、引用图谱 MVP。**Gtero** 每 Vault 一条 sticky Grok 会话已落地（见 [../frontend/gtero.md](../frontend/gtero.md)）。细节以功能文档为准。
 
 ---
 
 ## 0.3 — 入库与 Agent 补强
 
-在 0.5.0 基线上补齐仍缺口的「输入 → 资产 → Agent」路径。
+在 0.6.0 基线上补齐仍缺口的「输入 → 资产 → Agent」路径。
 
 | 主题 | 交付 |
 |---|---|
 | 智能入库 | 关键词/描述 → Agent 候选列表 → 确认入库 |
-| 入库编排 | 前端 `afterPaperImport` 统一后置；迁移/远程走同一 `paper_commit`；可选 `paper:imported` 事件 |
+| 入库编排 | 前端 `afterPaperImport` 已统一魔棒单条 / 本地 PDF / 单篇 Download；迁移/远程走同一 `paper_commit`；可选 `paper:imported` 事件 |
 | Agent | workflow 自动注入 Vault `AGENTS.md`；**Gtero** 每库 sticky Grok 会话（已实现，见 [../frontend/gtero.md](../frontend/gtero.md)） |
 | 配置 | 最近 Vault / UI 偏好与 XDG settings 完全对齐；设置内打开/导出日志目录 |
-| 导出 | `catalog:export_papers_md`（Markdown 表） |
+| 导出 | `catalog:export_papers_md`（Markdown 表；规划中，Host 尚无此 command；现有导出走 `paper_export`） |
 | CLI | `graph` / shell completions；`export papers-md` 对齐（Doctor 已实现） |
 | 阅读标注 CLI | `mark` CRUD + 默认惰性文字定位 + Skill（[#170](https://github.com/poco-ai/Agentero/issues/170)，设计：[mark-cli-roadmap.md](mark-cli-roadmap.md)） |
 | 桌面分发 | 桌面安装包内置同版本 `agentero` CLI；命令行打开本地 Vault；各平台 PATH 策略 |
@@ -113,7 +113,7 @@
 ## 版本号约定
 
 - 应用 / Tauri / CLI manifest 与 git tag `vX.Y.Z` **一致**（见 [release.md](../test/release.md)）。
-- **当前线：`0.5.0`**。下一功能版本从 **`0.6.0`** 起；`0.5.x` 仅用于 0.5 基线的补丁与热修。
+- **当前线：`0.6.0`**。下一功能版本从 **`0.7.0`** 起；`0.6.x` 仅用于 0.6 基线的补丁与热修。
 - 路线图版本（0.3 / 0.4…）是**产品切片**，落地时再写入 manifest 并打 tag。
 
 ## 相关文档

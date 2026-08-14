@@ -67,6 +67,10 @@ Skill 来源不受 Agentero 审计，安装第三方 Skill 等于引入外部指
 
 可选：**个人偏好提示词**（Settings → Agent → `agentPersonalPrompt`）会注入工作流 envelope；留空则不注入。
 
+## Gtero 粘性会话
+
+默认每个 Vault 复用一条 Grok 会话（Settings → Agent → **Gtero** / **粘性会话**，缺省均开）。划词解释、精读、库综合走同一线程；侧栏「+」弹出确认后才会分叉，**不**替换主线程。关闭 Gtero 或关闭粘性会话后，每次运行新建 ACP 会话。规格见 [Gtero](../frontend/gtero.md)。
+
 ## 权限模式
 
 Settings → Agent → 全局权限模式（对所有 Agent 生效，非 per-provider YOLO）：
@@ -92,7 +96,7 @@ Settings → Agent → 全局权限模式（对所有 Agent 生效，非 per-pro
 
 ### 自动精读
 
-Settings → Agent 开启 **自动精读**（`autoPaperReader`，默认关）。魔棒入库或单篇 Download 资源就绪后可自动启动。**批量**导入 / 批量 Download **不会**连跑精读。
+Settings → Agent 开启 **自动精读**（`autoPaperReader`，默认关）。魔棒单条、本地 PDF 单篇或单篇 Download 资源就绪后可自动启动。**批量**导入 / 批量 Download **不会**连跑精读。
 
 ## 常见问题
 

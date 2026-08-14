@@ -56,16 +56,16 @@ import {
 	type ToolAskUserRequest,
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
+import {
+	clearGteroRunAttempt,
+	handleGteroResumeFailure,
+} from "@/lib/agent/gtero-run";
 import { type AcpCommand, mapAcpCommands } from "@/lib/agent/slash-commands";
 import {
 	classifyStreamChunk,
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent/stream-parse";
-import {
-	clearGteroRunAttempt,
-	handleGteroResumeFailure,
-} from "@/lib/agent/gtero-run";
 import {
 	classifyGteroResumeError,
 	isGteroSticky,
@@ -498,7 +498,7 @@ export function useAgentSessionRuntime({
 									{
 										type: "text",
 										id: nextPartId("text"),
-										text: "(empty response)",
+										text: t("messages.emptyResponse"),
 									},
 								];
 							}
