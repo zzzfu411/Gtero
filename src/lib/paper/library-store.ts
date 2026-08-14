@@ -5,6 +5,8 @@
  */
 
 import { createStore } from "zustand/vanilla";
+import i18n from "@/i18n";
+import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import type { PaperMetadata } from "@/lib/paper";
 import { listPapers } from "@/lib/paper/api";
@@ -145,7 +147,11 @@ export async function refreshLibrary(): Promise<void> {
 	try {
 		setLibraryPapers(await listPapers(vaultPath));
 	} catch {
-		setLibraryPapers([]);
+		// Transient paper_list failures (catalog lock, external sqlite write)
+		// must not wipe rows — tree titles fall back to folder names otherwise.
+		notifyError(i18n.t("sidebar:papersLibrary.loadFailed"), {
+			id: "library-refresh",
+		});
 	} finally {
 		libraryStore.setState({ loading: false });
 	}

@@ -103,6 +103,7 @@
 		"rescanned": "Recovered {{count}} papers into the library.",
 		"rescanEmpty": "No papers found under papers/.",
 		"rescanFailed": "Rescan failed.",
+		"loadFailed": "Failed to load the library.",
 		"colTitle": "Title",
 		"colAuthors": "Authors",
 		"colYear": "Year",

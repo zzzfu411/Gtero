@@ -103,6 +103,7 @@
 		"rescanned": "已找回 {{count}} 篇论文到论文库。",
 		"rescanEmpty": "papers/ 下没有找到论文。",
 		"rescanFailed": "重新扫描失败。",
+		"loadFailed": "加载论文库失败。",
 		"colTitle": "标题",
 		"colAuthors": "作者",
 		"colYear": "年份",

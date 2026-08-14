@@ -9,6 +9,7 @@
 - **文件夹作用域**：单击 `papers/` 下非 paper 叶目录（如 `papers/nlp`）→ 同一 Library panel 上按 `paper.path` **前缀过滤**（不新开 tab、不重新 RPC）。
 - **非 papers 目录**（`notes/`、`.agents/`、`plans/` 等）：不进入文件夹作用域，Library 显示全库（#160）。
 - 外部 CLI / 同步工具改动 `.agentero/catalog.sqlite` 或 `papers/` 结构时，前端会后台去抖重新 `paper_list`，同步 Library 表格与文件树论文标题。
+- `refreshLibrary` 在 `paper_list` 失败时保留上一批 rows 并 `notifyError`，不清空表格（无 vault / 非 Tauri 才 `setLibraryPapers([])`）。
 - NOTES 仅选中**具体论文**时出现；Paper Info 保留最近选中的论文，切换到非论文文档时仍显示。
 
 ## 表格能力
@@ -36,4 +37,4 @@
 
 - UI：`src/components/library/`（拖入：`library-pdf-drop-surface.tsx`）
 - 状态：`src/lib/paper/library-store.ts`、`library-actions.ts`、`import-actions.ts`（`dropLocalPdfs`）
-- 单测：`test/library-scope.test.ts`、`test/prompt-image.test.ts`（`dataTransferLooksLikePdfs`）
+- 单测：`test/library-scope.test.ts`、`test/library-refresh.test.ts`（`refreshLibrary` 失败保旧行）、`test/prompt-image.test.ts`（`dataTransferLooksLikePdfs`）
