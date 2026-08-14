@@ -46,10 +46,7 @@ import {
 } from "@/lib/agent/chat-state";
 import type { AgentComposerState } from "@/lib/agent/composer-state";
 import { buildCorpusSynthesisPrompt } from "@/lib/agent/gtero-prompts";
-import {
-	handleGteroResumeFailure,
-	runOnceGtero,
-} from "@/lib/agent/gtero-run";
+import { handleGteroResumeFailure, runOnceGtero } from "@/lib/agent/gtero-run";
 import { formatFocusBlock, notesRelForPaper } from "@/lib/agent/paper-context";
 import {
 	consumeSelections,

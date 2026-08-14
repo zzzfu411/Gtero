@@ -219,9 +219,7 @@ export function PdfCardStack({
 					result={translate.record.result ?? ""}
 					streaming={translate.streaming}
 					error={translate.error ?? translate.record.error ?? null}
-					mode={
-						translate.record.mode === "explain" ? "explain" : "translate"
-					}
+					mode={translate.record.mode === "explain" ? "explain" : "translate"}
 					onOpenSettings={translate.onOpenSettings}
 					onHide={translate.onHide}
 					onDelete={translate.onDelete}

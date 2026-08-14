@@ -415,7 +415,6 @@ export function useAgentPanel({
 	}, [
 		gteroSticky,
 		vaultPath,
-		selectedAgentId,
 		activeTabRef,
 		activeConversationRef,
 		forkPendingRef,
