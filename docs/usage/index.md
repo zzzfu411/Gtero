@@ -7,7 +7,7 @@
 1. 用 **Vault**（普通文件夹）保存论文、PDF、Markdown 笔记和阅读标注。
 2. 用 **Library** 浏览论文列表，用文件树访问原始文件。
 3. 用 PDF 阅读器完成高亮、批注、提问和翻译；用 NOTES 整理阅读结果。
-4. 按需连接已安装的 **Agent**（BYOA），在当前 Vault 中总结、问答或整理笔记。
+4. 按需连接已安装的 **Agent**（BYOA），在当前 Vault 中总结、问答或整理笔记。Gtero 默认每个 Vault 复用一条 Grok 会话。
 
 ## 推荐路径
 
@@ -16,7 +16,7 @@
 | 第一次使用 | [安装与首次使用](getting-started.md) |
 | 保存 DOI / arXiv / 本地 PDF / 浏览器论文 | [导入和管理论文](import-papers.md) |
 | 读 PDF、高亮、批注、写 NOTES | [阅读、标注与整理](read-and-organize.md) |
-| 接 Claude / Codex 等 ACP Agent | [接入 Agent](agents.md) |
+| 接 Claude / Codex / Grok 等 ACP Agent（含 Gtero 粘性会话） | [接入 Agent](agents.md) |
 | 用 iPhone 连接桌面 Vault | [移动端](mobile.md) |
 | 用浏览器 Zotero Connector 保存 | [使用 Zotero Connector](zotero.md) |
 | 打开服务器上的研究资料库 | [打开远程 Vault](remote-vault.md) |
@@ -33,7 +33,7 @@
 
 ### Agent
 
-Agentero **不**内置模型，也**不**托管模型 API Key。通过 ACP 连接你本机或远程服务器上已安装并登录的 Agent。权限由设置中的全局权限模式控制。
+Agentero **不**内置模型，也**不**托管模型 API Key。通过 ACP 连接你本机或远程服务器上已安装并登录的 Agent。权限由设置中的全局权限模式控制。Gtero 默认把每个 Vault 绑到一条 Grok 会话，详见 [接入 Agent](agents.md) 与 [Gtero](../frontend/gtero.md)。
 
 ## 使用边界（当前）
 

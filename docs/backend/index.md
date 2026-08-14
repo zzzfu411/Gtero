@@ -101,6 +101,7 @@ src-tauri/src/
 | 双链索引 | [wiki.md](wiki.md) |
 | Vault Doctor | [doctor.md](doctor.md) |
 | Agent Host | [agent.md](agent.md) |
+| Gtero sticky 会话（前端 binder + `session/resume`） | [../frontend/gtero.md](../frontend/gtero.md) |
 | 远程 Vault | [remote.md](remote.md) |
 | 搜索 | [search.md](search.md) |
 | 设置 | [settings.md](settings.md) |
